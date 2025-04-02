@@ -7,7 +7,6 @@
 - **Nhập và Xử Lý Tệp:** Hỗ trợ các định dạng PDF, DOC; cho phép chỉnh sửa nội dung sau khi trích xuất.
 - **Chuyển Văn Bản Thành Giọng Nói (TTS):** Đọc to nội dung sách với giọng nói tự nhiên.
 - **Dịch Thuật:** Hỗ trợ dịch nội dung sách sang nhiều ngôn ngữ khác nhau.
-- **Quản Lý Từ Vựng:** Lưu trữ và quản lý các từ vựng quan trọng trong quá trình đọc.
 
 ## Công Nghệ Sử Dụng
 
