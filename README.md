@@ -1,4 +1,4 @@
-# Ứng dụng Đọc Sách và Quản Lý Tài Liệu Đa Ngôn Ngữ Tích Hợp TTS và Dịch Thuật
+# Ứng dụng Đọc Sách và Quản Lý Tài Liệu
 
 Ứng dụng di động hỗ trợ đọc sách điện tử với các tính năng như nhập và xử lý tệp (PDF, DOC), chỉnh sửa nội dung, chuyển văn bản thành giọng nói (Text-to-Speech), dịch thuật và quản lý từ vựng.
 
