@@ -28,7 +28,7 @@ class UsersController extends Controller
             return response()->json([
                 'status'    => true,
                 'message'   => "Đã đăng nhập thành công!",
-                'ten_user'  => $user->name,
+                'ten_user'  => $user->name_user,
                 'token'     => $token->plainTextToken,
             ], 200, ['Content-Type' => 'application/json']);
         } else {
@@ -90,7 +90,11 @@ class UsersController extends Controller
                 'message' => "Email đã tồn tại!",
             ]);
         }
-        $user = Users::create($request->all());
+        
+        $data = $request->all();
+        $data['user_id'] = 'K' . Str::random(6);
+        
+        $user = Users::create($data);
         return response()->json([
             'status'    => true,
             'message'   => "Đã đăng ký thành công!",
@@ -118,7 +122,7 @@ class UsersController extends Controller
             $user->save();
             
             $data = [
-                'ho_va_ten' => $user->name ?? $user->username,
+                'ho_va_ten' => $user->name_user ?? $user->username,
                 'mat_khau' => $newPassword
             ];
             Mail::to($request->email)->send(new MasterMail('Thông Tin Mật Khẩu Mới Của Bạn', 'quen_mat_khau', $data));
