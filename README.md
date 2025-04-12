@@ -18,6 +18,12 @@
   - **Dịch Thuật:** i18next
   - **Xử Lý Tệp:** react-native-document-picker, mammoth.js
 
+## Cơ Sở Dữ Liệu
+
+![image](https://github.com/user-attachments/assets/52185ee6-812e-4f3b-af12-20f9f8e288d4)
+
+
+
 ## Cài Đặt
 
 1. **Yêu Cầu Hệ Thống:**
