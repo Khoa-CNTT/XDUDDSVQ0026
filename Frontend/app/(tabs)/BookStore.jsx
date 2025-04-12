@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, Image, TouchableOpacity, FlatList, Dimensions, Animated, SafeAreaView } from 'react-native'
 import React, { useState, useRef, useEffect } from 'react'
-import RenderBookItem from "../components/Library/RenderBookItem"
+import RenderBookItem from "../components/BookStore/RenderBookItem"
 import SectionHeader from '../components/SectionHeader';
 const SPACING = 16;
 const { width } = Dimensions.get('window');

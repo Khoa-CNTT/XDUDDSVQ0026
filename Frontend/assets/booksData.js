@@ -6,7 +6,9 @@ const booksData = {
         image: require("../assets/images/bia1.png"),
         author: "Gao Ming",
         genre: "Tâm lý học",
-        description: "Cuốn sách giúp bạn hiểu về ranh giới giữa thiên tài và điên loạn."
+        description: "Cuốn sách giúp bạn hiểu về ranh giới giữa thiên tài và điên loạn.",
+        price : "$12.99",
+        rating: 4.5,
       },
       {
         id: "2",
@@ -14,7 +16,9 @@ const booksData = {
         image: require("../assets/images/bia2.png"),
         author: "Paulo Coelho",
         genre: "Tiểu thuyết",
-        description: "Câu chuyện về hành trình tìm kiếm giấc mơ và ý nghĩa cuộc sống."
+        description: "Câu chuyện về hành trình tìm kiếm giấc mơ và ý nghĩa cuộc sống.",
+        price : "$12.99",
+        rating: 4.5,
       },
       {
         id: "3",
@@ -22,7 +26,9 @@ const booksData = {
         image: require("../assets/images/bia3.png"),
         author: "Yuval Noah Harari",
         genre: "Lịch sử",
-        description: "Khám phá quá trình tiến hóa và phát triển của nhân loại."
+        description: "Khám phá quá trình tiến hóa và phát triển của nhân loại.",
+        price : "$12.99",
+        rating: 4.5,
       },
     ],
   

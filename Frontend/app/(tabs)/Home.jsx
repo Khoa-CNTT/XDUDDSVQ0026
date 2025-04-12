@@ -131,7 +131,7 @@ export default function HomeScreen() {
                   {/* Book Item */}
                   <TouchableOpacity
                     className="mt-[15px]"
-                    onPress={() => router.push(`/screen/${item.id}`)}
+                    onPress={() => router.push(`/Books/${item.id}`)}
                   >
                     {item.image ? (
                       <Image

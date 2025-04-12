@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 const RenderBookItem = ({ item }) => (
     <TouchableOpacity
       className="w-[120px] mr-4"
-      onPress={() => router.push(`/screen/${item.id}`)}
+      onPress={() => router.push(`/Books/${item.id}`)}
     >
       {item.image ? (
         <Image

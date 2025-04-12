@@ -1,8 +1,13 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { router } from 'expo-router';
+
+
 const RenderBookItem = ({ item }) => (
-    <TouchableOpacity key={item.id} className="mr-4 w-32">
+    <TouchableOpacity key={item.id} className="mr-4 w-32"
+      onPress={() => router.push(`/Books/${item.id}`)}
+    >
       <View className="bg-gray-100 rounded-lg overflow-hidden h-48 mb-2">
         <Image
           source={item.image}

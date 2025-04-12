@@ -12,7 +12,7 @@ const RenderReadingNowItem = ({ item }) => (
   <TouchableOpacity
     className="mb-6"
     style={{ width: ITEM_WIDTH }}
-    onPress={() => router.push(`/screen/${item.id}`)}
+    onPress={() => router.push(`/Books/${item.id}`)}
   >
     {item.image ? (
       <Image

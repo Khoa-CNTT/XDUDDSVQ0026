@@ -1,11 +1,8 @@
 import React from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StatusBar, SafeAreaView } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import booksData from '../../assets/booksData';
-
-
-
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -42,7 +39,7 @@ export default function BookDetailScreen() {
 
 
   return (
-    <SafeAreaView className="flex-1" >
+    <SafeAreaView className="flex-1 bg-white" >
       <Stack.Screen
         options={{
           title: 'Chi tiết sách',
@@ -51,10 +48,10 @@ export default function BookDetailScreen() {
       />
      
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="items-center pt-6 pb-8">
+        <View className="items-center pt-6 pb-8 shadow-lg">
           <Image
             source={book.image}
-            className="w-[180px] h-[270px] rounded-xl shadow-lg"
+            className="w-[180px] h-[270px] rounded-xl"
             resizeMode="cover"
           />
         </View>
@@ -79,20 +76,15 @@ export default function BookDetailScreen() {
                 <Text className="text-sm mt-1">Yêu thích</Text>
               </TouchableOpacity>
           </View>
-
          
-          <TouchableOpacity className="py-3 rounded-xl mb-6 border-black border-2" >
-            <Text className="text-black font-extrabold text-center text-xl">Đọc mẫu</Text>
-          </TouchableOpacity>
-         
-          <View className="p-4 rounded-xl shadow-sm mb-6" >
+          <View className="p-4 rounded-xl mb-6" >
             <Text className="text-xl font-bold mb-2" >Giới thiệu sách</Text>
             <Text className="text-base leading-6" >
               {book.description || 'Đây là một cuốn sách tuyệt vời với nội dung phong phú và hấp dẫn. Tác giả đã mang đến cho người đọc một góc nhìn độc đáo về cuộc sống và con người.'}
             </Text>
           </View>
          
-          <View className="p-4 rounded-xl shadow-sm mb-6" >
+          <View className="p-4 rounded-xl mb-6" >
             <Text className="text-lg font-bold mb-2" >Thông tin</Text>
             <View className="flex-row justify-between py-2 border-b" >
               <Text >Thể loại</Text>
@@ -113,6 +105,12 @@ export default function BookDetailScreen() {
           </View>
         </View>
       </ScrollView>
+      <View className="p-6 bottom-0 w-full left-0 right-0 bg-gray-100 flex-row justify-between items-center py-4">
+        <Text className="text-black font-extrabold text-center text-xl ms-6">{book.price || "Free"}</Text>
+        <TouchableOpacity className="bg-blue-400 rounded-md p-3 w-32">
+          <Text className="text-white font-extrabold text-center text-xl">{book.price ? "Mua Ngay" : "Đọc Ngay"}</Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
