@@ -30,7 +30,7 @@ export default function LogIn() {
     setLoading(true);
     try {
       // Cập nhật URL Ngrok cố định
-      const API_URL = 'https://refined-true-macaw.ngrok-free.app/api/users/dang-nhap';
+      const API_URL = 'https://refined-true-macaw.ngrok-free.app/api/dang-nhap';
       
       console.log('Connecting to:', API_URL);
       
@@ -66,8 +66,8 @@ export default function LogIn() {
       }
 
       // Lưu tên người dùng nếu có
-      if (data.ten_user) {
-        await AsyncStorage.setItem('name', data.ten_user);
+      if (data.name_user) {
+        await AsyncStorage.setItem('name', data.name_user);
       }
       
       // Lưu token nếu có

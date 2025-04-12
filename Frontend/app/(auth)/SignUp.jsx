@@ -18,14 +18,14 @@ import axios from 'axios';
 
 export default function SignUp() {
   const router = useRouter();
-  const [name, setName] = useState('');
+  const [name_user, setName_user] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSignUp = async () => {
-    if (email === '' || password === '' || name === '') {
+    if (email === '' || password === '' || name_user === '') {
       Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
       return;
     }
@@ -37,8 +37,8 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      const response = await axios.post('https://refined-true-macaw.ngrok-free.app/api/users/dang-ky', {
-        name: name,
+      const response = await axios.post('https://refined-true-macaw.ngrok-free.app/api/dang-ky', {
+        name_user: name_user,
         email: email,
         password: password,
       });
@@ -112,8 +112,8 @@ export default function SignUp() {
             <TextInput
               className="p-4 bg-gray-100 text-gray-700 rounded-2xl mb-3"
               placeholder="Nhập Họ và Tên"
-              value={name}
-              onChangeText={setName}
+              value={name_user}
+              onChangeText={setName_user}
             />
             <Text className="text-gray-700 ml-4">Email</Text>
             <TextInput
