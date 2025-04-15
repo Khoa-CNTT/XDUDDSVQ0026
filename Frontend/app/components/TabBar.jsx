@@ -12,7 +12,7 @@ const TabBar = ({ state, descriptors, navigation }) => {
         Search : (props)=> <FontAwesome5 name='search' size={26} color={greyColor} {...props}/>
     }
 
-    const primaryColor ='#0891b2';
+    const primaryColor ='#4f26dc';
     const greyColor = '#737373';
 
 
