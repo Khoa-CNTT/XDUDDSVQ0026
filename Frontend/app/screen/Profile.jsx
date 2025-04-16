@@ -2,8 +2,9 @@ import { View, Text, SafeAreaView, Image, ScrollView, TouchableOpacity } from 'r
 import React from 'react'
 import { Stack } from 'expo-router'
 import { Feather ,FontAwesome } from '@expo/vector-icons';
-
+import { useRouter } from 'expo-router';
 export default function Profile() {
+    const router = useRouter();
     return (
         <SafeAreaView>
             <Stack.Screen
@@ -26,7 +27,9 @@ export default function Profile() {
                     <Feather name="log-out" size={22} color="#0891b2" />
                     <Text className="text-2xl font-light text-black">Đăng Xuất</Text>
                 </TouchableOpacity>
-                <TouchableOpacity className="flex-row items-center px-5 pb-5 gap-x-6">
+                <TouchableOpacity className="flex-row items-center px-5 pb-5 gap-x-6"
+                    onPress={() => router.push('/(auth)/ChangePassword')}
+                >
                     <FontAwesome name="exchange" size={22} color="#0891b2" />
                     <Text className="text-2xl font-light text-black">Đổi Mật Khẩu</Text>
                 </TouchableOpacity>
