@@ -1,7 +1,12 @@
-import { View, Text,TextInput, TouchableOpacity } from 'react-native'
+import { View, Text, TextInput, TouchableOpacity } from 'react-native'
 import React, { useState } from 'react';
 import { Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 export default function ChangePassword() {
+    const [isSecureTextEntry1, setIsSecureTextEntry1] = useState(true);
+    const [isSecureTextEntry2, setIsSecureTextEntry2] = useState(true);
+    const [isSecureTextEntry3, setIsSecureTextEntry3] = useState(true);
+
     
     return (
         <View className="flex-1 mt-10 gap-y-3 mx-5">
@@ -11,37 +16,70 @@ export default function ChangePassword() {
                     headerBackTitle: 'Quay lại',
                 }}
             />
-            <Text className="text-gray-700 ml-4 text-2xl font-bold ">Mật Khẩu Hiện Tại</Text>
-            <TextInput
-                className="p-4 bg-white text-gray-700 rounded-2xl"
-                placeholder="Nhập Mật Khẩu Hiện Tại"
-                secureTextEntry={true}
-                returnKeyType="done"
-            />
-            <Text className="text-gray-700 ml-4 text-2xl font-bold ">Mật Khẩu Mới</Text>
-            <TextInput
-                className="p-4 bg-white text-gray-700 rounded-2xl"
-                placeholder="Nhập Mật Khẩu Hiện Tại"
-                secureTextEntry={true}
-                returnKeyType="done"
-            />
-            <Text className="text-gray-700 ml-4 text-2sxl font-bold ">Nhập Lại Mật Khẩu Mới</Text>
-            <TextInput
-                className="p-4 bg-white text-gray-700 rounded-2xl"
-                placeholder="Nhập Mật Khẩu Hiện Tại"
-                secureTextEntry={true}
-                returnKeyType="done"
-            />
+            <Text className="text-gray-700 ml-4 text-2xl font-bold ">Mật khẩu hiện tại</Text>
+            <View className="flex-row bg-gray-200 rounded-2xl items-center mb-4 px-2">
+                <TextInput
+                    className="flex-1 p-4 text-gray-700  rounded-2xl"
+                    placeholder="Nhập mật khẩu hiện tại"
+                    placeholderTextColor="black"
+                    returnKeyType="done"
+                    secureTextEntry={isSecureTextEntry1}
+                />
+                <TouchableOpacity
+                    className="px-3 py-2"
+                    onPress={() => setIsSecureTextEntry1(!isSecureTextEntry1)}
+                >
+                    <Text className="text-black font-medium">
+                        {isSecureTextEntry1 ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+            <Text className="text-gray-700 ml-4 text-2xl font-bold ">Mật khẩu mới</Text>
+            <View className="flex-row bg-gray-200 rounded-2xl items-center mb-4 px-2">
+                <TextInput
+                    className="flex-1 p-4 text-gray-700  rounded-2xl"
+                    placeholder="Nhập mật khẩu mới"
+                    placeholderTextColor="black"
+                    returnKeyType="done"
+                    secureTextEntry={isSecureTextEntry2}
+                />
+                <TouchableOpacity
+                    className="px-3 py-2"
+                    onPress={() => setIsSecureTextEntry2(!isSecureTextEntry2)}
+                >
+                    <Text className="text-black font-medium">
+                        {isSecureTextEntry2 ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+            <Text className="text-gray-700 ml-4 text-2xl font-bold ">Nhập lại mật khẩu mới</Text>
+            <View className="flex-row bg-gray-200 rounded-2xl items-center mb-4 px-2">
+                <TextInput
+                    className="flex-1 p-4 text-gray-700 rounded-2xl"
+                    placeholder="Nhập lại mật khẩu mới"
+                    placeholderTextColor="black"
+                    returnKeyType="done"
+                    secureTextEntry={isSecureTextEntry3}
+                />
+                <TouchableOpacity
+                    className="px-3 py-2"
+                    onPress={() => setIsSecureTextEntry3(!isSecureTextEntry3)}
+                >
+                    <Text className="text-black font-medium">
+                        {isSecureTextEntry3 ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+                    </Text>
+                </TouchableOpacity>
+            </View>
             <TouchableOpacity className="flex items-end my-5">
-                        <Text className="text-gray-700 font-xl">Quên mật khẩu ?</Text>
-                      </TouchableOpacity>
+                <Text className="text-gray-700 font-xl">Quên mật khẩu ?</Text>
+            </TouchableOpacity>
             <TouchableOpacity className="bg-blue-400 py-3 mt-3 rounded-xl">
                 <Text className="text-center text-black font-bold text-xl">
                     Đổi Mật Khẩu
-                </Text> 
+                </Text>
             </TouchableOpacity>
         </View>
-        
-        
+
+
     )
 }
