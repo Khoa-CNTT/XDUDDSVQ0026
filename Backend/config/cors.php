@@ -21,7 +21,10 @@ return [
 
     'allowed_origins' => ['*'],
 
-    'allowed_origins_patterns' => [],
+    'allowed_origins_patterns' => [
+        'https://*.ngrok-free.app',
+        'http://*.ngrok-free.app',
+    ],
 
     'allowed_headers' => ['*'],
 
