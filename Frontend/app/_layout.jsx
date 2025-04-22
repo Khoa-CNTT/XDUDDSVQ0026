@@ -2,7 +2,8 @@ import { View, Text } from 'react-native'
 import React from 'react'
 import { Stack } from 'expo-router' 
 import "../global.css"
-export default function _layout() {
+
+export default function AppLayout() {
   return(
     <Stack>
       <Stack.Screen name="Landing" 
@@ -38,6 +39,33 @@ export default function _layout() {
             headerTransparent: true,
             headerTitle: '',
             headerShown: false,
+        }}
+       />
+       <Stack.Screen name="UploadPdf"
+        options={{
+            headerTransparent: false,
+            headerTitle: 'Tải lên sách PDF',
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#fff',
+            },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: 'bold',
+            },
+            animation: 'slide_from_bottom'
+        }}
+       />
+       <Stack.Screen name="PdfViewer"
+        options={{
+            headerShown: false,
+            animation: 'slide_from_right'
+        }}
+       />
+       <Stack.Screen name="pages/pdf-reader"
+        options={{
+            headerShown: false,
+            animation: 'slide_from_right'
         }}
        />
     </Stack>

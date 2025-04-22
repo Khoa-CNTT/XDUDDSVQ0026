@@ -186,4 +186,100 @@ class BookController extends Controller
             'data' => $books
         ]);
     }
+
+    /**
+     * Trích xuất ảnh bìa từ PDF
+     */
+    public function extractCover(Request $request)
+    {
+        if (!$request->hasFile('pdf')) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Không có file PDF được tải lên'
+            ]);
+        }
+        
+        $file = $request->file('pdf');
+        $tempPath = $file->store('temp_pdfs', 'public');
+        $fullPath = storage_path('app/public/' . $tempPath);
+        
+        try {
+            // Sử dụng thư viện ImageMagick để trích xuất trang đầu tiên
+            $outputImagePath = storage_path('app/public/covers/' . uniqid() . '.jpg');
+            
+            // Tạo thư mục nếu chưa tồn tại
+            if (!file_exists(storage_path('app/public/covers'))) {
+                mkdir(storage_path('app/public/covers'), 0777, true);
+            }
+            
+            // Chuyển đổi trang đầu tiên của PDF thành ảnh
+            $command = "convert -density 150 -quality 90 '{$fullPath}[0]' '{$outputImagePath}'";
+            exec($command, $output, $returnVar);
+            
+            if ($returnVar !== 0) {
+                throw new \Exception('Không thể trích xuất ảnh bìa');
+            }
+            
+            $coverImageUrl = asset('storage/covers/' . basename($outputImagePath));
+            
+            // Xóa file tạm thời
+            unlink($fullPath);
+            
+            return response()->json([
+                'status' => true,
+                'coverImageUrl' => $coverImageUrl
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Lỗi khi trích xuất ảnh bìa: ' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Tải lên sách PDF
+     */
+    public function upload(Request $request)
+    {
+        if (!$request->hasFile('pdf')) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Không có file PDF được tải lên'
+            ]);
+        }
+        
+        try {
+            $file = $request->file('pdf');
+            $fileName = uniqid() . '.pdf';
+            $pdfPath = $file->storeAs('pdfs', $fileName, 'public');
+            
+            $bookId = 'BOOK' . Str::random(6);
+            
+            // Lưu thông tin sách vào database
+            $book = Book::create([
+                'book_id' => $bookId,
+                'name_book' => $request->input('title'),
+                'title' => $request->input('title'),
+                'image' => $request->input('coverImage', null),
+                'created_at' => now(),
+                'author_id' => 'AUTH000001', // Mặc định hoặc từ request
+                'category_id' => 'CAT000001', // Mặc định hoặc từ request
+                'price' => 0,
+                'is_free' => true,
+                'file_path' => asset('storage/' . $pdfPath)
+            ]);
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Đã tải lên sách thành công',
+                'data' => $book
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Lỗi khi tải lên sách: ' . $e->getMessage()
+            ]);
+        }
+    }
 } 

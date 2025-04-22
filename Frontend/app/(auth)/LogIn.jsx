@@ -14,6 +14,8 @@ import React, { useState, useEffect } from "react";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config';
+import authService from '../services/authService';
 
 export default function LogIn() {
   const router = useRouter();
@@ -24,12 +26,11 @@ export default function LogIn() {
   const [isSecureTextEntry, setIsSecureTextEntry] = useState(true);
 
   const handleLogin = async () => {
-    if (email === '' || password === '') {
+    if (!email || !password) {
       Alert.alert('Lỗi', 'Vui lòng nhập email và mật khẩu');
       return;
     }
-
-    setLoading(true);
+  
     try {
       // Cập nhật URL Ngrok cố định
       const API_URL = 'https://refined-true-macaw.ngrok-free.app/api/dang-nhap';
@@ -106,6 +107,26 @@ export default function LogIn() {
       [{ text: 'OK' }]
     );
   };
+
+  // Kiểm tra token hiện tại và chuyển hướng nếu đã đăng nhập
+  useEffect(() => {
+    const checkToken = async () => {
+      try {
+        const authStatus = await authService.checkAuthStatus();
+        console.log('Auth status:', authStatus);
+        if (authStatus.isLoggedIn) {
+          router.push('/(tabs)/Home');
+        }
+      } catch (error) {
+        console.error('Error checking token:', error);
+        // Xóa token để đảm bảo an toàn
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
+      }
+    };
+    
+    checkToken();
+  }, []);
 
   return (
     <View className="flex-1 bg-white" style={{ backgroundColor: "#4169e1" }}>

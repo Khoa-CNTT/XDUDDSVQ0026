@@ -26,6 +26,7 @@ class Book extends Model
         'category_id',
         'price',
         'is_free',
+        'file_path',
         'updated_at'
     ];
 
