@@ -12,10 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->string('password');
+            $table->string('user_id', 10)->primary();
+            $table->string('name_user', 200);
+            $table->string('email', 100)->unique();
+            $table->string('password', 255);
             $table->string('remember_token')->nullable();
             $table->timestamps();
         });
@@ -28,4 +28,4 @@ return new class extends Migration
     {
         Schema::dropIfExists('users');
     }
-};
+}; 

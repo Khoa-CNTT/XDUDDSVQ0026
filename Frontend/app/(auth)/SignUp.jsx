@@ -15,17 +15,20 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import React, { useState } from "react";
 import { useRouter } from "expo-router";
 import axios from 'axios';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function SignUp() {
   const router = useRouter();
-  const [name, setName] = useState('');
+  const [name_user, setName_user] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSecureTextEntry, setIsSecureTextEntry] = useState(true);
+  const [isSecureTextEntry2, setIsSecureTextEntry2] = useState(true);
 
   const handleSignUp = async () => {
-    if (email === '' || password === '' || name === '') {
+    if (email === '' || password === '' || name_user === '') {
       Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
       return;
     }
@@ -37,8 +40,8 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      const response = await axios.post('https://refined-true-macaw.ngrok-free.app/api/users/dang-ky', {
-        name: name,
+      const response = await axios.post('https://refined-true-macaw.ngrok-free.app/api/dang-ky', {
+        name_user: name_user,
         email: email,
         password: password,
       });
@@ -112,8 +115,8 @@ export default function SignUp() {
             <TextInput
               className="p-4 bg-gray-100 text-gray-700 rounded-2xl mb-3"
               placeholder="Nhập Họ và Tên"
-              value={name}
-              onChangeText={setName}
+              value={name_user}
+              onChangeText={setName_user}
             />
             <Text className="text-gray-700 ml-4">Email</Text>
             <TextInput
@@ -125,21 +128,41 @@ export default function SignUp() {
               autoCapitalize="none"
             />
             <Text className="text-gray-700 ml-4">Mật Khẩu</Text>
+          <View className="flex-row  rounded-2xl items-center mb-4">
             <TextInput
-              className="p-4 bg-gray-100 text-gray-700 rounded-2xl mb-3"
+              className="flex-1 p-4 bg-gray-100 text-gray-700 rounded-2xl"
               placeholder="Nhập Mật Khẩu"
-              secureTextEntry={true}
+              secureTextEntry={isSecureTextEntry}
               value={password}
               onChangeText={setPassword}
             />
+            <TouchableOpacity
+              className="px-3 py-2"
+              onPress={() => setIsSecureTextEntry(!isSecureTextEntry)}
+            >
+              <Text className="text-black font-medium">
+                {isSecureTextEntry ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+              </Text>
+            </TouchableOpacity>
+          </View>
             <Text className="text-gray-700 ml-4">Nhập Lại Mật Khẩu</Text>
-            <TextInput
-              className="p-4 bg-gray-100 text-gray-700 rounded-2xl mb-3"
-              placeholder="Nhập Lại Mật Khẩu"
-              secureTextEntry={true}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
+                      <View className="flex-row  rounded-2xl items-center mb-4">
+                        <TextInput
+                          className="flex-1 p-4 bg-gray-100 text-gray-700 rounded-2xl"
+                          placeholder="Nhập Lại Mật Khẩu"
+                          secureTextEntry={isSecureTextEntry2}
+                          value={password}
+                          onChangeText={setPassword}
+                        />
+                        <TouchableOpacity
+                          className="px-3 py-2"
+                          onPress={() => setIsSecureTextEntry2(!isSecureTextEntry2)}
+                        >
+                          <Text className="text-black font-medium">
+                            {isSecureTextEntry2 ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
             
             <TouchableOpacity 
               className="bg-yellow-400 py-3 mt-5 rounded-xl"

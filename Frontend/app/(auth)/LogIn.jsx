@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import AntDesign from '@expo/vector-icons/AntDesign';
 import React, { useState, useEffect } from "react";
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -20,6 +21,7 @@ export default function LogIn() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [isSecureTextEntry, setIsSecureTextEntry] = useState(true);
 
   const handleLogin = async () => {
     if (email === '' || password === '') {
@@ -30,10 +32,10 @@ export default function LogIn() {
     setLoading(true);
     try {
       // Cập nhật URL Ngrok cố định
-      const API_URL = 'https://refined-true-macaw.ngrok-free.app/api/users/dang-nhap';
-      
+      const API_URL = 'https://refined-true-macaw.ngrok-free.app/api/dang-nhap';
+
       console.log('Connecting to:', API_URL);
-      
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -49,7 +51,7 @@ export default function LogIn() {
       // Kiểm tra response trước khi parse JSON
       const responseText = await response.text();
       console.log('Raw response:', responseText);
-      
+
       let data;
       try {
         data = JSON.parse(responseText);
@@ -57,7 +59,7 @@ export default function LogIn() {
         console.error('JSON parse error:', parseError);
         throw new Error('Lỗi kết nối đến server. Vui lòng thử lại sau.');
       }
-      
+
       console.log('Response data:', data);
 
       if (!data.status) {
@@ -66,10 +68,10 @@ export default function LogIn() {
       }
 
       // Lưu tên người dùng nếu có
-      if (data.ten_user) {
-        await AsyncStorage.setItem('name', data.ten_user);
+      if (data.name_user) {
+        await AsyncStorage.setItem('name', data.name_user);
       }
-      
+
       // Lưu token nếu có
       if (data.token) {
         await AsyncStorage.setItem('authToken', data.token);
@@ -84,13 +86,13 @@ export default function LogIn() {
       ]);
     } catch (error) {
       console.error('Lỗi đăng nhập:', error);
-      
+
       // Thông báo lỗi cho người dùng
       let errorMessage = 'Đã xảy ra lỗi khi đăng nhập';
       if (error.message) {
         errorMessage = error.message;
       }
-      
+
       Alert.alert('Lỗi đăng nhập', errorMessage);
     } finally {
       setLoading(false);
@@ -109,9 +111,9 @@ export default function LogIn() {
     <View className="flex-1 bg-white" style={{ backgroundColor: "#4169e1" }}>
       <SafeAreaView className="flex">
         <View className="flex-row justify-start mt-3">
-          <TouchableOpacity 
-          onPress={() => router.push('Landing')}
-          className="bg-yellow-400 p-2 rounded-tr-2xl ml-5 rounded-bl-2xl">
+          <TouchableOpacity
+            onPress={() => router.push('Landing')}
+            className="bg-yellow-400 p-2 rounded-tr-2xl ml-5 rounded-bl-2xl">
             <AntDesign name="back" size={24} color="black" />
           </TouchableOpacity>
         </View>
@@ -137,17 +139,27 @@ export default function LogIn() {
             autoCapitalize="none"
           />
           <Text className="text-gray-700 ml-4">Mật Khẩu</Text>
-          <TextInput
-            className="p-4 bg-gray-100 text-gray-700 rounded-2xl"
-            placeholder="Nhập Mật Khẩu"
-            secureTextEntry={true}
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View className="flex-row  rounded-2xl items-center mb-4">
+            <TextInput
+              className="flex-1 p-4 bg-gray-100 text-gray-700 rounded-2xl"
+              placeholder="Nhập Mật Khẩu"
+              secureTextEntry={isSecureTextEntry}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity
+              className="px-3 py-2"
+              onPress={() => setIsSecureTextEntry(!isSecureTextEntry)}
+            >
+              <Text className="text-black font-medium">
+                {isSecureTextEntry ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity className="flex items-end mb-5">
             <Text className="text-gray-700 mt-2">Quên mật khẩu ?</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             className="bg-yellow-400 py-3 mt-3 rounded-xl"
             onPress={handleLogin}
             disabled={loading}
@@ -160,7 +172,7 @@ export default function LogIn() {
               </Text>
             )}
           </TouchableOpacity>
-          
+
           <View className="flex-row justify-center mt-48">
             <Text className="text-xl ">bạn chưa có tài khoản? </Text>
             <TouchableOpacity onPress={() => router.push("/(auth)/SignUp")}>

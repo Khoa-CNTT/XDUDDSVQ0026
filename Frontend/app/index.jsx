@@ -7,6 +7,7 @@ export default function index() {
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
       {/* <Redirect href={"Landing"} /> */}
       <Redirect href={"/(tabs)/Home"} />
+
     </View>
   )
 }

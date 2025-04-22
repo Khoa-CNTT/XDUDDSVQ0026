@@ -4,7 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Users;
 use Illuminate\Database\Seeder;
-
+use Illuminate\Support\Str;
 class UsersSeeder extends Seeder
 {
     /**
@@ -15,7 +15,8 @@ class UsersSeeder extends Seeder
     public function run()
     {
         Users::create([
-            'name' => 'Admin User',
+            'user_id' => "K" . Str::random(4),
+            'name_user' => 'Admin User',
             'email' => 'admin@gmail.com',
             'password' => bcrypt('123123'),
         ]);
