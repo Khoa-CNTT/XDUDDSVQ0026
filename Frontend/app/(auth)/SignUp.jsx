@@ -15,6 +15,7 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import React, { useState } from "react";
 import { useRouter } from "expo-router";
 import axios from 'axios';
+import { API_URL } from '../config';
 
 export default function SignUp() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      const response = await axios.post('https://refined-true-macaw.ngrok-free.app/api/dang-ky', {
+      const response = await axios.post(`${API_URL}/dang-ky`, {
         name_user: name_user,
         email: email,
         password: password,
