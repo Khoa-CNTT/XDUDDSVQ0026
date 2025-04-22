@@ -5,7 +5,16 @@ import { router } from 'expo-router';
 const RenderBookItem = ({ item }) => (
     <TouchableOpacity
       className="w-[120px] mr-4"
-      onPress={() => router.push(`/Books/${item.id}`)}
+      onPress={() => {
+        if (item.file_path) {
+          router.push({
+            pathname: '/PdfViewer',
+            params: { pdfPath: item.file_path, pdfTitle: item.title || item.name_book }
+          });
+        } else {
+          router.push(`/Books/${item.id || item.book_id}`);
+        }
+      }}
     >
       {item.image ? (
         <Image
@@ -22,7 +31,7 @@ const RenderBookItem = ({ item }) => (
         className="font-semibold text-sm mb-0.5"
         numberOfLines={2}
       >
-        {item.title}
+        {item.title || item.name_book}
       </Text>
       <Text className="text-gray-500 text-xs">{item.author}</Text>
     </TouchableOpacity>

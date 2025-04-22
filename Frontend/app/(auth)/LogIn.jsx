@@ -13,6 +13,8 @@ import AntDesign from '@expo/vector-icons/AntDesign';
 import React, { useState, useEffect } from "react";
 import { useRouter } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config';
+import authService from '../services/authService';
 
 export default function LogIn() {
   const router = useRouter();
@@ -22,76 +24,27 @@ export default function LogIn() {
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (email === '' || password === '') {
+    if (!email || !password) {
       Alert.alert('Lỗi', 'Vui lòng nhập email và mật khẩu');
       return;
     }
-
-    setLoading(true);
+  
     try {
-      // Cập nhật URL Ngrok cố định
-      const API_URL = 'https://refined-true-macaw.ngrok-free.app/api/dang-nhap';
+      setLoading(true);
+      const result = await authService.login(email, password);
       
-      console.log('Connecting to:', API_URL);
-      
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      });
-
-      // Kiểm tra response trước khi parse JSON
-      const responseText = await response.text();
-      console.log('Raw response:', responseText);
-      
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError);
-        throw new Error('Lỗi kết nối đến server. Vui lòng thử lại sau.');
+      if (result.success) {
+        console.log('Đăng nhập thành công, token đã được lưu');
+        router.replace('/(tabs)/Home');
+      } else {
+        Alert.alert('Đăng nhập thất bại', result.message || 'Vui lòng kiểm tra lại thông tin đăng nhập');
       }
-      
-      console.log('Response data:', data);
-
-      if (!data.status) {
-        // Xử lý trường hợp đăng nhập thất bại
-        throw new Error(data.message || 'Email hoặc mật khẩu không chính xác');
-      }
-
-      // Lưu tên người dùng nếu có
-      if (data.name_user) {
-        await AsyncStorage.setItem('name', data.name_user);
-      }
-      
-      // Lưu token nếu có
-      if (data.token) {
-        await AsyncStorage.setItem('authToken', data.token);
-      }
-
-      console.log('Đăng nhập thành công!');
-      Alert.alert('Thành công', data.message, [
-        {
-          text: 'OK',
-          onPress: () => router.push('/(tabs)/Home')
-        }
-      ]);
     } catch (error) {
       console.error('Lỗi đăng nhập:', error);
-      
-      // Thông báo lỗi cho người dùng
-      let errorMessage = 'Đã xảy ra lỗi khi đăng nhập';
-      if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      Alert.alert('Lỗi đăng nhập', errorMessage);
+      Alert.alert('Lỗi', 'Không thể đăng nhập. Vui lòng thử lại sau.');
+      // Xóa token nếu có lỗi
+      await AsyncStorage.removeItem('token');
+      await AsyncStorage.removeItem('user');
     } finally {
       setLoading(false);
     }
@@ -104,6 +57,26 @@ export default function LogIn() {
       [{ text: 'OK' }]
     );
   };
+
+  // Kiểm tra token hiện tại và chuyển hướng nếu đã đăng nhập
+  useEffect(() => {
+    const checkToken = async () => {
+      try {
+        const authStatus = await authService.checkAuthStatus();
+        console.log('Auth status:', authStatus);
+        if (authStatus.isLoggedIn) {
+          router.push('/(tabs)/Home');
+        }
+      } catch (error) {
+        console.error('Error checking token:', error);
+        // Xóa token để đảm bảo an toàn
+        await AsyncStorage.removeItem('token');
+        await AsyncStorage.removeItem('user');
+      }
+    };
+    
+    checkToken();
+  }, []);
 
   return (
     <View className="flex-1 bg-white" style={{ backgroundColor: "#4169e1" }}>

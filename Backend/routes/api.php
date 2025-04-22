@@ -6,6 +6,7 @@ use App\Http\Controllers\UsersController;
 use App\Http\Controllers\BookController;
 use App\Http\Controllers\AuthorController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\PDFController;
 
 /*
 |--------------------------------------------------------------------------
@@ -22,6 +23,9 @@ use App\Http\Controllers\CategoryController;
 Route::post('/dang-nhap', [UsersController::class, 'dangNhap']);
 Route::post('/dang-ky', [UsersController::class, 'dangKy']);
 Route::post('/quen-mat-khau', [UsersController::class, 'quenMatKhau']);
+
+// Public route with token parameter for iframe PDF viewing
+Route::get('/pdfs/{pdf}/download-with-token', [PDFController::class, 'downloadWithToken']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -44,6 +48,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/books', [BookController::class, 'themMoi']);
     Route::put('/books/{id}', [BookController::class, 'capNhat']);
     Route::delete('/books/{id}', [BookController::class, 'xoa']);
+    Route::post('/books/extract-cover', [BookController::class, 'extractCover']);
+    Route::post('/books/upload', [BookController::class, 'upload']);
     
     // Author routes
     Route::get('/authors', [AuthorController::class, 'danhSach']);
@@ -59,4 +65,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/categories', [CategoryController::class, 'themMoi']);
     Route::put('/categories/{id}', [CategoryController::class, 'capNhat']);
     Route::delete('/categories/{id}', [CategoryController::class, 'xoa']);
+
+    // PDF routes
+    Route::get('/pdfs', [PDFController::class, 'index']);
+    Route::post('/pdfs', [PDFController::class, 'store']);
+    Route::post('/pdfs/upload', [PDFController::class, 'upload']);
+    Route::get('/pdfs/{pdf}', [PDFController::class, 'show']);
+    Route::put('/pdfs/{pdf}', [PDFController::class, 'update']);
+    Route::delete('/pdfs/{pdf}', [PDFController::class, 'destroy']);
+    Route::get('/pdfs/{pdf}/download', [PDFController::class, 'download']);
 });
