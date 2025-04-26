@@ -32,12 +32,12 @@ export default function LogIn() {
     }
   
     try {
-      // Cập nhật URL Ngrok cố định
-      const API_URL = 'https://refined-true-macaw.ngrok-free.app/api/dang-nhap';
+      // Use API_URL from config instead of hardcoding
+      const loginUrl = `${API_URL}/dang-nhap`;
 
-      console.log('Connecting to:', API_URL);
+      console.log('Connecting to:', loginUrl);
 
-      const response = await fetch(API_URL, {
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,7 +75,8 @@ export default function LogIn() {
 
       // Lưu token nếu có
       if (data.token) {
-        await AsyncStorage.setItem('authToken', data.token);
+        console.log('Token từ server đã được lưu:', data.token);
+        await AsyncStorage.setItem('token', data.token);
       }
 
       console.log('Đăng nhập thành công!');

@@ -485,18 +485,18 @@ export default function HomeScreen() {
   };
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <FlatList
-        data={sections}
-        keyExtractor={item => item.id}
-        renderItem={renderSection}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={
-              <View className="flex-1">
-                <HeaderHome />
-              </View>
-            }
-        contentContainerStyle={{ paddingBottom: SPACING * 7 }}
-      />
+    <FlatList
+    data={sections}
+    keyExtractor={item => item.id}
+    renderItem={renderSection}
+    showsVerticalScrollIndicator={false}
+    ListHeaderComponent={
+          <View className="flex-1">
+            <HeaderHome />
+          </View>
+        }
+    contentContainerStyle={{ paddingBottom: SPACING * 7 }}
+  />
     </SafeAreaView>
   );
 }
