@@ -35,13 +35,6 @@ export default function _layout() {
             headerShown: false,
         }}
         />
-        <Tabs.Screen name="Profile"
-          options={{
-            headerTransparent: true,
-            headerTitle: '',
-            headerShown: false,
-        }}
-        />
     </Tabs>
     
   )

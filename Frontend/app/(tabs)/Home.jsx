@@ -485,25 +485,18 @@ export default function HomeScreen() {
   };
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <View className="flex-1">
-        <HeaderHome />
-        <View className="flex-1">
-          {loading ? (
-            <View className="flex-1 justify-center items-center">
-              <ActivityIndicator size="large" color="#0064e1" />
-              <Text className="mt-4 text-gray-600">Đang tải dữ liệu...</Text>
-            </View>
-          ) : (
-            <FlatList
-              data={sections}
-              keyExtractor={item => item.id}
-              renderItem={renderSection}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: SPACING * 7 }}
-            />
-          )}
-        </View>
-      </View>
+    <FlatList
+    data={sections}
+    keyExtractor={item => item.id}
+    renderItem={renderSection}
+    showsVerticalScrollIndicator={false}
+    ListHeaderComponent={
+          <View className="flex-1">
+            <HeaderHome />
+          </View>
+        }
+    contentContainerStyle={{ paddingBottom: SPACING * 7 }}
+  />
     </SafeAreaView>
   );
 }

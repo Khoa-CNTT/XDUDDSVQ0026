@@ -14,8 +14,9 @@ import {
 import AntDesign from '@expo/vector-icons/AntDesign';
 import React, { useState } from "react";
 import { useRouter } from "expo-router";
-import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
+import { API_URL } from '../config';
+import authService from '../services/authService';
 
 export default function SignUp() {
   const router = useRouter();
@@ -28,29 +29,50 @@ export default function SignUp() {
   const [isSecureTextEntry2, setIsSecureTextEntry2] = useState(true);
 
   const handleSignUp = async () => {
-    if (email === '' || password === '' || name_user === '') {
+    // Trim whitespace
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedConfirmPassword = confirmPassword.trim();
+    const trimmedName = name_user.trim();
+
+    // Validate all fields
+    if (trimmedEmail === '' || trimmedPassword === '' || trimmedName === '') {
       Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin');
       return;
     }
 
-    if (password !== confirmPassword) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      Alert.alert('Lỗi', 'Email không hợp lệ');
+      return;
+    }
+
+    // Validate password length
+    if (trimmedPassword.length < 6) {
+      Alert.alert('Lỗi', 'Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+
+    // Validate password match - compare trimmed values
+    if (trimmedPassword !== trimmedConfirmPassword) {
       Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/dang-ky`, {
-        name_user: name_user,
-        email: email,
-        password: password,
-      });
+      const userData = {
+        name_user: trimmedName,
+        email: trimmedEmail,
+        password: trimmedPassword,
+      };
       
-      console.log('Response:', response.data);
+      const result = await authService.register(userData);
       
-      if (response.data.status) {
-        console.log('Đăng ký thành công:', email);
-        Alert.alert('Thành công', response.data.message || 'Đã đăng ký thành công!', [
+      if (result.success) {
+        console.log('Đăng ký thành công:', trimmedEmail);
+        Alert.alert('Thành công', result.message || 'Đã đăng ký thành công!', [
           {
             text: 'OK',
             onPress: () => router.push('/(auth)/LogIn')
@@ -58,28 +80,11 @@ export default function SignUp() {
         ]);
       } else {
         // Hiển thị thông báo lỗi từ backend
-        Alert.alert('Lỗi', response.data.message || 'Đăng ký thất bại');
+        Alert.alert('Lỗi', result.message || 'Đăng ký thất bại');
       }
     } catch (error) {
       console.error('Lỗi đăng ký:', error);
-      
-      // Xử lý lỗi từ API
-      if (error.response) {
-        // Nếu server trả về lỗi với status code
-        const errorMessage = error.response.data.message || 'Đã xảy ra lỗi khi đăng ký';
-        Alert.alert('Lỗi đăng ký', errorMessage);
-        
-        // Log chi tiết lỗi nếu có
-        if (error.response.data.errors) {
-          console.log('Validation errors:', error.response.data.errors);
-        }
-      } else if (error.request) {
-        // Nếu request được gửi nhưng không nhận được response
-        Alert.alert('Lỗi kết nối', 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng.');
-      } else {
-        // Lỗi khác
-        Alert.alert('Lỗi', 'Đã xảy ra lỗi không xác định');
-      }
+      Alert.alert('Lỗi', 'Đã xảy ra lỗi khi đăng ký. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
     }
@@ -146,23 +151,23 @@ export default function SignUp() {
             </TouchableOpacity>
           </View>
             <Text className="text-gray-700 ml-4">Nhập Lại Mật Khẩu</Text>
-                      <View className="flex-row  rounded-2xl items-center mb-4">
-                        <TextInput
-                          className="flex-1 p-4 bg-gray-100 text-gray-700 rounded-2xl"
-                          placeholder="Nhập Lại Mật Khẩu"
-                          secureTextEntry={isSecureTextEntry2}
-                          value={password}
-                          onChangeText={setPassword}
-                        />
-                        <TouchableOpacity
-                          className="px-3 py-2"
-                          onPress={() => setIsSecureTextEntry2(!isSecureTextEntry2)}
-                        >
-                          <Text className="text-black font-medium">
-                            {isSecureTextEntry2 ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+            <View className="flex-row rounded-2xl items-center mb-4">
+              <TextInput
+                className="flex-1 p-4 bg-gray-100 text-gray-700 rounded-2xl"
+                placeholder="Nhập Lại Mật Khẩu"
+                secureTextEntry={isSecureTextEntry2}
+                value={confirmPassword}
+                onChangeText={(text) => setConfirmPassword(text)}
+              />
+              <TouchableOpacity
+                className="px-3 py-2"
+                onPress={() => setIsSecureTextEntry2(!isSecureTextEntry2)}
+              >
+                <Text className="text-black font-medium">
+                  {isSecureTextEntry2 ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+                </Text>
+              </TouchableOpacity>
+            </View>
             
             <TouchableOpacity 
               className="bg-yellow-400 py-3 mt-5 rounded-xl"
