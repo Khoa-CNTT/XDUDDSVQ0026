@@ -113,36 +113,6 @@ export default function UploadPdfScreen() {
     }
   };
   
-  // Hàm tải PDF
-  const downloadPDF = async (pdfId) => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      
-      // Trong React Native, cần phải xử lý tải file theo cách khác
-      // Ví dụ sử dụng FileSystem của Expo
-      const fileUri = `${API_URL}/pdfs/${pdfId}/download`;
-      
-      Alert.alert('Download Started', 'PDF download started, please wait...');
-      
-      const downloadResumable = FileSystem.createDownloadResumable(
-        fileUri,
-        FileSystem.documentDirectory + 'downloaded_pdf.pdf',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-      
-      const { uri } = await downloadResumable.downloadAsync();
-      
-      Alert.alert('Download Complete', `PDF saved to ${uri}`);
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      Alert.alert('Error', `Failed to download PDF: ${error.message}`);
-    }
-  };
-  
   // Hàm xóa PDF
   const deletePDF = async (pdfId) => {
     try {
@@ -318,14 +288,7 @@ export default function UploadPdfScreen() {
         >
           <Text className="text-white">View</Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity 
-          onPress={() => downloadPDF(item.id)}
-          className="bg-green-500 px-3 py-1 rounded"
-        >
-          <Text className="text-white">Download</Text>
-        </TouchableOpacity>
-        
+ 
         <TouchableOpacity 
           onPress={() => deletePDF(item.id)}
           className="bg-red-500 px-3 py-1 rounded"

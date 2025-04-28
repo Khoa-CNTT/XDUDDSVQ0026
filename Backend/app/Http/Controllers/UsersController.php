@@ -9,6 +9,8 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\MasterMail;
 use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\PersonalAccessToken;
+
 class UsersController extends Controller
 {
     public function dangNhap(Request $request)
@@ -23,7 +25,11 @@ class UsersController extends Controller
         }
 
         if (Hash::check($request->password, $user->password)) {
-            $token = $user->createToken('token_user', ['*'], $this->getDeviceInfo($request));
+            // Get device information
+            $deviceInfo = $this->getDeviceInfo($request);
+            
+            // Create token with device information passed correctly as third parameter
+            $token = $user->createToken('token_user', ['*'], $deviceInfo);
             
             return response()->json([
                 'status'    => true,
@@ -49,16 +55,15 @@ class UsersController extends Controller
             $deviceType = 'Android';
         } elseif (strpos($userAgent, 'iPhone') !== false || strpos($userAgent, 'iPad') !== false) {
             $deviceType = 'iOS';
-        } elseif (strpos($userAgent, 'Windows') !== false) {
-            $deviceType = 'Windows';
-        } elseif (strpos($userAgent, 'Macintosh') !== false) {
-            $deviceType = 'Mac';
-        } elseif (strpos($userAgent, 'Linux') !== false) {
-            $deviceType = 'Linux';
         }
         
         if ($request->has('device_name')) {
             $deviceName = $request->device_name;
+        } else if ($request->has('deviceName')) {
+            $deviceName = $request->deviceName;
+        } else {
+            // Try to extract device name from user agent
+            $deviceName = $this->extractDeviceNameFromUserAgent($userAgent);
         }
         
         return [
@@ -67,6 +72,28 @@ class UsersController extends Controller
             'ip_address' => $request->ip(),
             'last_used_at' => now(),
         ];
+    }
+
+    /**
+     * Extract a more meaningful device name from the User-Agent string
+     */
+    private function extractDeviceNameFromUserAgent($userAgent)
+    {
+        $deviceName = 'unknown';
+        
+        // Common patterns to extract device information from User-Agent
+        if (preg_match('/\((.+?)\)/', $userAgent, $matches)) {
+            $deviceInfo = $matches[1];
+            $deviceParts = explode(';', $deviceInfo);
+            
+            if (count($deviceParts) > 1) {
+                $deviceName = trim($deviceParts[1]);
+            } else {
+                $deviceName = trim($deviceParts[0]);
+            }
+        }
+        
+        return $deviceName;
     }
 
     public function dangKy(Request $request)
