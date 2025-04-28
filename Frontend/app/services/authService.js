@@ -2,9 +2,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 
 // Đăng nhập
-export const login = async (email, password) => {
+export const login = async (email, password, deviceName = '') => {
   try {
     console.log('Sending login request to:', `${API_URL}/dang-nhap`);
+    
+    // Prepare request body
+    const requestBody = { 
+      email, 
+      password 
+    };
+    
+    // Add device_name if provided
+    if (deviceName) {
+      requestBody.device_name = deviceName;
+    }
     
     // Gọi API đăng nhập thực tế
     const response = await fetch(`${API_URL}/dang-nhap`, {
@@ -13,7 +24,7 @@ export const login = async (email, password) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(requestBody),
     });
 
     // Lấy response dưới dạng text trước
@@ -39,63 +50,47 @@ export const login = async (email, password) => {
       
       // Lưu token vào authToken để tương thích với code cũ
       await AsyncStorage.setItem('authToken', data.token);
+
+      // Lưu email đã đăng nhập
+      await AsyncStorage.setItem('email', email);
+      console.log('Email saved:', email);
       
       // Lưu thông tin user nếu có
+      let userData = null;
       if (data.user) {
-        await AsyncStorage.setItem('user', JSON.stringify(data.user));
-        console.log('User data saved');
+        userData = data.user;
+      } else if (data.ten_user) {
+        // Tạo đối tượng user từ ten_user nếu không có đối tượng user đầy đủ
+        userData = {
+          name: data.ten_user,
+          email: email // Sử dụng email đã nhập
+        };
+      }
+      
+      if (userData) {
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
+        console.log('User data saved:', userData);
+      } else {
+        console.log('No user data available to save');
       }
       
       return { 
         success: true, 
-        user: data.user,
+        user: userData,
         token: data.token,
         message: data.message || 'Đăng nhập thành công' 
       };
     } else {
-      // Thử sử dụng fake token nếu đăng nhập thất bại
-      console.log('Đăng nhập API thất bại, sử dụng fake token');
-      const fakeToken = 'fake_token_' + Date.now();
-      await AsyncStorage.setItem('token', fakeToken);
-      await AsyncStorage.setItem('authToken', fakeToken);
-      
-      // Tạo dữ liệu người dùng giả
-      const fakeUser = {
-        id: 1,
-        name: 'User Demo',
-        email: email || 'user@example.com'
-      };
-      await AsyncStorage.setItem('user', JSON.stringify(fakeUser));
-      
       return { 
-        success: true,
-        user: fakeUser,
-        token: fakeToken,
-        message: 'Đăng nhập thành công (chế độ Offline)' 
+        success: false,
+        message: data.message || 'Email hoặc mật khẩu không chính xác'
       };
     }
   } catch (error) {
     console.error('Login fetch error:', error);
-    
-    // Tạo fake token nếu có lỗi kết nối
-    console.log('Lỗi kết nối API, sử dụng fake token');
-    const fakeToken = 'fake_token_error_' + Date.now();
-    await AsyncStorage.setItem('token', fakeToken);
-    await AsyncStorage.setItem('authToken', fakeToken);
-    
-    // Tạo dữ liệu người dùng giả
-    const fakeUser = {
-      id: 1,
-      name: 'User Demo',
-      email: email || 'user@example.com'
-    };
-    await AsyncStorage.setItem('user', JSON.stringify(fakeUser));
-    
     return { 
-      success: true,
-      user: fakeUser,
-      token: fakeToken,
-      message: 'Đăng nhập thành công (chế độ Offline)' 
+      success: false,
+      message: error.message || 'Có lỗi xảy ra khi kết nối đến server'
     };
   }
 };
@@ -269,6 +264,97 @@ export const getUserInfo = async () => {
   }
 };
 
+// Lấy thông tin đăng nhập trước đó
+export const getPreviousLoginInfo = async () => {
+  try {
+    console.log('Getting previous login info...');
+    const token = await AsyncStorage.getItem('token');
+    console.log('Retrieved token:', token ? 'Token exists' : 'No token');
+    
+    const userString = await AsyncStorage.getItem('user');
+    console.log('Retrieved user string:', userString ? 'User data exists' : 'No user data');
+    
+    // Nếu có token, lấy thông tin user từ API nếu không có trong local storage
+    if (token) {
+      // Nếu có user data trong local storage
+      if (userString) {
+        try {
+          const user = JSON.parse(userString);
+          console.log('User data parsed successfully:', user);
+          return { 
+            hasLogin: true, 
+            token, 
+            user 
+          };
+        } catch (parseError) {
+          console.error('Error parsing user data:', parseError);
+          // Không return false ngay, thử lấy thông tin từ API
+        }
+      }
+      
+      // Nếu không có user data hoặc parse lỗi, thử lấy từ API
+      try {
+        console.log('Trying to get user info from API...');
+        // Lấy thông tin user từ API
+        const response = await fetch(`${API_URL}/user`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        const responseText = await response.text();
+        const data = JSON.parse(responseText);
+        
+        if (data.success && data.user) {
+          // Lưu thông tin user mới vào AsyncStorage
+          await AsyncStorage.setItem('user', JSON.stringify(data.user));
+          console.log('User data retrieved from API and saved');
+          return { 
+            hasLogin: true, 
+            token, 
+            user: data.user 
+          };
+        } else {
+          // Token không hợp lệ hoặc không lấy được thông tin user
+          console.log('Could not retrieve user data from API');
+        }
+      } catch (apiError) {
+        console.error('Error getting user info from API:', apiError);
+        // Tiếp tục kiểm tra có email không
+      }
+      
+      // Cuối cùng, nếu vẫn không có thông tin user đầy đủ nhưng có token,
+      // tạo một đối tượng user giả với email từ AsyncStorage
+      const email = await AsyncStorage.getItem('email');
+      if (email) {
+        const user = { email };
+        console.log('Created minimal user object with email:', email);
+        return { 
+          hasLogin: true, 
+          token, 
+          user 
+        };
+      }
+      
+      // Nếu có token nhưng không thể lấy thông tin user, vẫn cho phép đăng nhập
+      return { 
+        hasLogin: true, 
+        token, 
+        user: { name: 'Người dùng' } 
+      };
+    }
+    
+    // Nếu không có token, không có đăng nhập trước đó
+    console.log('No previous login detected');
+    return { hasLogin: false };
+  } catch (error) {
+    console.error('Get previous login info error:', error);
+    return { hasLogin: false, error: error.message };
+  }
+};
+
 // Tạo đối tượng chứa tất cả các hàm
 const authService = {
   login,
@@ -276,7 +362,8 @@ const authService = {
   logout,
   checkAuthStatus,
   forgotPassword,
-  getUserInfo
+  getUserInfo,
+  getPreviousLoginInfo
 };
 
 // Export default để sửa lỗi "missing required default export"

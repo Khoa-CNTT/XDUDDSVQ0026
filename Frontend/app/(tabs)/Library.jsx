@@ -200,7 +200,7 @@ export default function Library() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <ScrollView className="flex-1 px-4">
-        <Text className="text-4xl font-bold mt-12 mb-8">Thư Viện</Text>
+        <Text className="text-4xl font-bold">Thư Viện</Text>
         
         {/* Add from device menu */}
         <TouchableOpacity
@@ -216,7 +216,7 @@ export default function Library() {
         
         {/* Sách có thể đọc */}
         <View className="mt-6">
-          <Text className="text-2xl font-bold mb-4">Sách có thể đọc</Text>
+          <Text className="text-2xl font-bold mb-4">Sách & Tài Liệu có thể đọc</Text>
           
           {loadingPdfs ? (
             <View className="py-10 items-center">
