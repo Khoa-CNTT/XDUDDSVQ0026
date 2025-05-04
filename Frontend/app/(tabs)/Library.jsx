@@ -9,6 +9,8 @@ import {
   SafeAreaView,
   Dimensions,
   ActivityIndicator,
+  TextInput,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -20,59 +22,210 @@ import * as FileSystem from 'expo-file-system';
 const { width } = Dimensions.get("window");
 const THUMBNAIL_SIZE = 60; // Kích thước cố định cho hình thu nhỏ
 
+// Các loại định dạng file được hỗ trợ - dựa theo OpenReadEra
+const FILE_FORMATS = [
+  { id: 'pdf', name: 'PDF', icon: 'document-text', color: '#e53935' },
+  { id: 'epub', name: 'EPUB/FB2', icon: 'book', color: '#43a047' },
+  { id: 'doc', name: 'DOC/DOCX', icon: 'document', color: '#1e88e5' },
+  { id: 'txt', name: 'TXT', icon: 'text', color: '#757575' },
+];
+
 export default function Library() {
   const router = useRouter();
   const [pdfs, setPdfs] = useState([]);
   const [loadingPdfs, setLoadingPdfs] = useState(true);
   const [pdfReadingProgress, setPdfReadingProgress] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFormatFilter, setShowFormatFilter] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState(null);
+  const [sortBy, setSortBy] = useState('recent'); // 'recent', 'name', 'size'
+  const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
+  const [showSortOptions, setShowSortOptions] = useState(false);
+  const [showCreateShelf, setShowCreateShelf] = useState(false);
+  const [newShelfName, setNewShelfName] = useState('');
+  const [bookshelves, setBookshelves] = useState([]);
   
+  // Sử dụng useEffect để tải dữ liệu
   useEffect(() => {
     loadReadingProgress();
+    loadBookshelves();
   }, []);
   
   // Sử dụng useFocusEffect để tải lại dữ liệu mỗi khi màn hình được focus
   useFocusEffect(
     React.useCallback(() => {
-      fetchPDFs();
       loadReadingProgress();
+      fetchPDFs();
       
       return () => {
         // Cleanup nếu cần
       };
-    }, [])
+    }, [selectedFormat, sortBy, sortDirection, searchQuery])
   );
   
-  // Dữ liệu mẫu cho các sách
-  const books = [
-    {
-      id: 1,
-      title: "Hãy Nhớ Tên Anh Ấy",
-      author: "Trần Hồng Quân",
-      colors: ["#8e44ad", "#9b59b6", "#a569bd"], // Màu chính, phụ 1, phụ 2
-      count: 5,
-    },
-    {
-      id: 2,
-      title: "The Great Gatsby",
-      author: "F. Scott Fitzgerald",
-      colors: ["#6a5acd", "#8e7cc3", "#9c87de"], // Màu tím xanh
-      count: 49,
-    },
-    {
-      id: 3,
-      title: "Đắc Nhân Tâm",
-      author: "Dale Carnegie",
-      colors: ["#2ecc71", "#27ae60", "#16a085"], // Màu xanh lá
-      count: 12,
-    },
-    {
-      id: 4,
-      title: "Các Yếu Tố Lãnh Đạo Thành Công",
-      author: "John Maxwell",
-      colors: ["#3949ab", "#5c6bc0", "#7986cb"], // Màu xanh đậm
-      count: 5,
-    },
-  ];
+  // Function để tính toán tiến độ đọc một cách nhất quán
+  const getReadingProgressForPdf = (pdfId) => {
+    const progress = pdfReadingProgress[pdfId];
+    if (!progress) return 0;
+    
+    // First use saved percentage if available
+    if (progress.percentage) {
+      return parseInt(progress.percentage, 10);
+    }
+    
+    // Otherwise calculate from page and total
+    if (progress.page && progress.total) {
+      return Math.floor((progress.page / progress.total) * 100) || 0;
+    }
+    
+    return 0;
+  };
+  
+  // Tải dữ liệu giá sách từ AsyncStorage
+  const loadBookshelves = async () => {
+    try {
+      const shelvesData = await AsyncStorage.getItem('bookshelves');
+      if (shelvesData) {
+        setBookshelves(JSON.parse(shelvesData));
+      } else {
+        // Khởi tạo các kệ sách mặc định (như OpenReadEra)
+        const defaultShelves = [
+          {
+            id: 'favorites',
+            name: 'Yêu thích',
+            icon: 'heart',
+            color: '#e91e63',
+            books: []
+          },
+          {
+            id: 'reading',
+            name: 'Đang đọc',
+            icon: 'book-open',
+            color: '#2196f3',
+            books: []
+          },
+          {
+            id: 'completed',
+            name: 'Đã hoàn thành',
+            icon: 'checkmark-circle',
+            color: '#4caf50',
+            books: []
+          }
+        ];
+        setBookshelves(defaultShelves);
+        await AsyncStorage.setItem('bookshelves', JSON.stringify(defaultShelves));
+      }
+    } catch (error) {
+      console.error('Error loading bookshelves:', error);
+    }
+  };
+  
+  // Lưu giá sách vào AsyncStorage
+  const saveBookshelves = async (shelves) => {
+    try {
+      await AsyncStorage.setItem('bookshelves', JSON.stringify(shelves));
+    } catch (error) {
+      console.error('Error saving bookshelves:', error);
+    }
+  };
+  
+  // Thêm sách vào giá sách
+  const addToBookshelf = async (pdfId, shelfId) => {
+    const updatedShelves = bookshelves.map(shelf => {
+      if (shelf.id === shelfId) {
+        // Kiểm tra nếu sách đã tồn tại trong kệ
+        if (!shelf.books.includes(pdfId)) {
+          return {
+            ...shelf,
+            books: [...shelf.books, pdfId]
+          };
+        }
+      }
+      return shelf;
+    });
+    
+    setBookshelves(updatedShelves);
+    await saveBookshelves(updatedShelves);
+  };
+  
+  // Xóa sách khỏi giá sách
+  const removeFromBookshelf = async (pdfId, shelfId) => {
+    const updatedShelves = bookshelves.map(shelf => {
+      if (shelf.id === shelfId) {
+        return {
+          ...shelf,
+          books: shelf.books.filter(id => id !== pdfId)
+        };
+      }
+      return shelf;
+    });
+    
+    setBookshelves(updatedShelves);
+    await saveBookshelves(updatedShelves);
+  };
+  
+  // Tạo giá sách mới
+  const createNewShelf = async () => {
+    if (!newShelfName.trim()) return;
+    
+    const newShelf = {
+      id: 'shelf_' + Date.now(),
+      name: newShelfName.trim(),
+      icon: 'bookmarks',
+      color: '#ff9800', // Màu mặc định
+      books: []
+    };
+    
+    const updatedShelves = [...bookshelves, newShelf];
+    setBookshelves(updatedShelves);
+    await saveBookshelves(updatedShelves);
+    setNewShelfName('');
+    setShowCreateShelf(false);
+  };
+
+  // Thay đổi cách sắp xếp
+  const toggleSortOption = (option) => {
+    if (sortBy === option) {
+      // Nếu đang chọn cùng loại sắp xếp, đảo ngược hướng sắp xếp
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Nếu chọn loại sắp xếp mới, mặc định là giảm dần (desc)
+      setSortBy(option);
+      setSortDirection('desc');
+    }
+    setShowSortOptions(false);
+  };
+
+  // Tải thông tin tiến độ đọc các PDF
+  const loadReadingProgress = async () => {
+    try {
+      // Only use AsyncStorage (removed database sync)
+      const keys = await AsyncStorage.getAllKeys();
+      const progressKeys = keys.filter(key => key.startsWith('pdf_progress_'));
+      
+      if (progressKeys.length > 0) {
+        const progressItems = await AsyncStorage.multiGet(progressKeys);
+        const progressData = {};
+        
+        progressItems.forEach(([key, value]) => {
+          if (value) {
+            try {
+              const pdfId = key.replace('pdf_progress_', '');
+              const progress = JSON.parse(value);
+              progressData[pdfId] = progress;
+            } catch (parseError) {
+              console.error('Error parsing progress data:', parseError);
+            }
+          }
+        });
+        
+        setPdfReadingProgress(progressData);
+        console.log('Loaded reading progress from local storage for', Object.keys(progressData).length, 'PDFs');
+      }
+    } catch (error) {
+      console.error('Error loading reading progress:', error);
+    }
+  };
 
   // Lấy danh sách PDF từ API
   const fetchPDFs = async () => {
@@ -95,10 +248,114 @@ export default function Library() {
         }
       });
       
-      const data = await response.json();
+      // Check if response is OK
+      if (!response.ok) {
+        console.log(`Server responded with status: ${response.status}`);
+        throw new Error(`Server responded with status: ${response.status}`);
+      }
+      
+      // Safer way to parse JSON response
+      let data;
+      try {
+        const textResponse = await response.text();
+        // Check if response starts with <!DOCTYPE html> or other HTML indicators
+        if (textResponse.trim().startsWith('<!DOCTYPE') || 
+            textResponse.trim().startsWith('<html') || 
+            textResponse.includes('<body')) {
+          console.error('Received HTML instead of JSON');
+          throw new Error('Received HTML instead of JSON');
+        }
+        
+        // Check if response is empty
+        if (!textResponse || textResponse.trim() === '') {
+          console.error('Empty response from server');
+          throw new Error('Empty response from server');
+        }
+        
+        // Try to parse the JSON
+        data = JSON.parse(textResponse);
+      } catch (parseError) {
+        console.error('JSON Parse error:', parseError.message);
+        console.log('Response begins with:', response.status, response.statusText);
+        setPdfs([]);
+        setLoadingPdfs(false);
+        throw new Error('Failed to parse server response. Please try again later.');
+      }
       
       if (data.success) {
-        setPdfs(data.data);
+        let filteredDocs = data.data;
+        
+        // Process PDFs and enhance with reading progress
+        filteredDocs = filteredDocs.map(doc => {
+          const progress = getReadingProgressForPdf(doc.id);
+          return {
+            ...doc,
+            progress
+          };
+        });
+        
+        // Lọc theo định dạng (nếu có)
+        if (selectedFormat) {
+          // Giả định: theo các file đuôi để lọc
+          filteredDocs = filteredDocs.filter(doc => {
+            const fileName = doc.file_name?.toLowerCase() || '';
+            
+            switch(selectedFormat) {
+              case 'pdf':
+                return fileName.endsWith('.pdf');
+              case 'epub':
+                return fileName.endsWith('.epub') || fileName.endsWith('.fb2');
+              case 'doc':
+                return fileName.endsWith('.doc') || fileName.endsWith('.docx');
+              case 'txt':
+                return fileName.endsWith('.txt');
+              default:
+                return true;
+            }
+          });
+        }
+        
+        // Lọc theo từ khóa tìm kiếm
+        if (searchQuery) {
+          const query = searchQuery.toLowerCase();
+          filteredDocs = filteredDocs.filter(doc => 
+            doc.title?.toLowerCase().includes(query) || 
+            doc.description?.toLowerCase().includes(query)
+          );
+        }
+        
+        // Sắp xếp theo lựa chọn
+        const isAsc = sortDirection === 'asc';
+        
+        switch(sortBy) {
+          case 'name':
+            filteredDocs.sort((a, b) => {
+              const titleA = (a.title || '').toLowerCase();
+              const titleB = (b.title || '').toLowerCase();
+              const compareResult = titleA.localeCompare(titleB, 'vi');
+              return isAsc ? compareResult : -compareResult;
+            });
+            break;
+            
+          case 'size':
+            filteredDocs.sort((a, b) => {
+              const sizeA = a.file_size || 0;
+              const sizeB = b.file_size || 0;
+              return isAsc ? sizeA - sizeB : sizeB - sizeA;
+            });
+            break;
+            
+          case 'recent':
+          default:
+            filteredDocs.sort((a, b) => {
+              const dateA = new Date(a.updated_at || a.created_at || 0);
+              const dateB = new Date(b.updated_at || b.created_at || 0);
+              return isAsc ? dateA - dateB : dateB - dateA;
+            });
+            break;
+        }
+        
+        setPdfs(filteredDocs);
       } else {
         throw new Error(data.message || 'Failed to fetch PDFs');
       }
@@ -107,33 +364,6 @@ export default function Library() {
       setPdfs([]);
     } finally {
       setLoadingPdfs(false);
-    }
-  };
-  
-  // Tải thông tin tiến độ đọc các PDF
-  const loadReadingProgress = async () => {
-    try {
-      // Only use AsyncStorage (removed database sync)
-      const keys = await AsyncStorage.getAllKeys();
-      const progressKeys = keys.filter(key => key.startsWith('pdf_progress_'));
-      
-      if (progressKeys.length > 0) {
-        const progressItems = await AsyncStorage.multiGet(progressKeys);
-        const progressData = {};
-        
-        progressItems.forEach(([key, value]) => {
-          if (value) {
-            const pdfId = key.replace('pdf_progress_', '');
-            const progress = JSON.parse(value);
-            progressData[pdfId] = progress;
-          }
-        });
-        
-        setPdfReadingProgress(progressData);
-        console.log('Loaded reading progress from local storage for', Object.keys(progressData).length, 'PDFs');
-      }
-    } catch (error) {
-      console.error('Error loading reading progress:', error);
     }
   };
 
@@ -180,27 +410,285 @@ export default function Library() {
     }
   };
   
-  // Lấy tiến độ đọc của một PDF
-  const getReadingProgress = (pdfId) => {
-    const progress = pdfReadingProgress[pdfId];
-    if (progress) {
-      // First use the saved percentage if available
-      if (progress.percentage) {
-        return parseInt(progress.percentage, 10);
-      }
-      
-      // Fall back to calculating from page and total
-      if (progress.page && progress.total) {
-        return Math.floor((progress.page / progress.total) * 100) || 0;
-      }
-    }
-    return 0;
+  // Render từng PDF item
+  const renderPdfItem = ({ item }) => {
+    // Sử dụng tiến độ đọc từ item thay vì từ phương thức getReadingProgress
+    const progressPercent = item.progress || 0;
+    
+    // Lấy danh sách các kệ sách chứa cuốn sách này
+    const containingShelves = bookshelves.filter(shelf => 
+      shelf.books.includes(item.id.toString())
+    );
+    
+    return (
+      <TouchableOpacity 
+        key={item.id}
+        className="bg-white shadow-sm rounded-lg p-4 mb-3 flex-row"
+        onPress={() => handleViewPdf(item.id)}
+      >
+        <View className="w-14 h-20 bg-blue-100 rounded-md items-center justify-center mr-4">
+          <Ionicons name="document-text" size={32} color="#0064e1" />
+        </View>
+        
+        <View className="flex-1">
+          <Text className="text-base font-bold mb-1">{item.title}</Text>
+          <Text className="text-xs text-gray-500 mb-2">
+            {(item.file_size / 1024 / 1024).toFixed(2)} MB
+          </Text>
+          
+          {/* Hiển thị tiến độ đọc */}
+          <View className="mt-2">
+            <View className="w-full h-1.5 bg-gray-200 rounded-full">
+              <View 
+                className="h-1.5 bg-blue-500 rounded-full" 
+                style={{ width: `${progressPercent}%` }} 
+              />
+            </View>
+            <View className="flex-row justify-between mt-1">
+              <Text className="text-xs text-gray-500">
+                Đã đọc {progressPercent}%
+              </Text>
+              {progressPercent >= 100 && (
+                <Text className="text-xs text-green-600 font-bold">
+                  Đã hoàn thành
+                </Text>
+              )}
+            </View>
+          </View>
+          
+          {/* Hiển thị các kệ sách chứa quyển này */}
+          {containingShelves.length > 0 && (
+            <View className="flex-row mt-2">
+              {containingShelves.slice(0, 3).map(shelf => (
+                <View 
+                  key={shelf.id}
+                  className="px-2 py-1 rounded-full mr-1"
+                  style={{ backgroundColor: `${shelf.color}20` }}
+                >
+                  <Text className="text-xs" style={{ color: shelf.color }}>
+                    {shelf.name}
+                  </Text>
+                </View>
+              ))}
+              {containingShelves.length > 3 && (
+                <Text className="text-xs text-gray-500 ml-1">+{containingShelves.length - 3}</Text>
+              )}
+            </View>
+          )}
+        </View>
+        
+        {/* Menu dropdown */}
+        <TouchableOpacity 
+          className="p-2" 
+          onPress={() => {
+            // Tạo menu context cho sách
+            // (tính năng này sẽ được triển khai đầy đủ sau)
+          }}
+        >
+          <Ionicons name="ellipsis-vertical" size={20} color="#0064e1" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
   };
+  
+  // Render kệ sách item
+  const renderBookshelfItem = ({ item }) => {
+    const booksInShelf = bookshelves.find(s => s.id === item.id)?.books || [];
+    
+    return (
+      <TouchableOpacity
+        className="flex-row items-center py-3 border-b border-gray-100"
+        onPress={() => {
+          // Navigation to bookshelf detail view would go here
+        }}
+      >
+        {/* Icon */}
+        <View 
+          className="w-12 h-12 rounded-full items-center justify-center mr-4"
+          style={{ backgroundColor: `${item.color}20` }}
+        >
+          <Ionicons name={item.icon} size={24} color={item.color} />
+        </View>
+        
+        {/* Title and info */}
+        <View className="flex-1">
+          <Text className="text-base font-medium">{item.name}</Text>
+          <Text className="text-sm text-gray-500 mt-1">
+            {booksInShelf.length} sách
+          </Text>
+        </View>
+        
+        {/* More options */}
+        <TouchableOpacity className="p-2">
+          <Ionicons name="chevron-forward" size={18} color="#666" />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
+  
+  // Tiêu đề phần
+  const SectionTitle = ({ title, onAction, actionText }) => (
+    <View className="flex-row justify-between items-center mb-4">
+      <Text className="text-2xl font-bold">{title}</Text>
+      {actionText && (
+        <TouchableOpacity onPress={onAction}>
+          <Text className="text-blue-500">{actionText}</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  // Lấy tên và biểu tượng sắp xếp hiện tại
+  const getSortInfo = () => {
+    let name = '';
+    let iconName = '';
+    
+    switch(sortBy) {
+      case 'name':
+        name = 'A-Z';
+        iconName = sortDirection === 'asc' ? 'arrow-up' : 'arrow-down';
+        break;
+      case 'size':
+        name = 'Kích thước';
+        iconName = sortDirection === 'asc' ? 'arrow-up' : 'arrow-down';
+        break;
+      case 'recent':
+      default:
+        name = 'Gần đây';
+        iconName = sortDirection === 'asc' ? 'arrow-up' : 'arrow-down';
+        break;
+    }
+    
+    return { name, iconName };
+  };
+
+  const sortInfo = getSortInfo();
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView className="flex-1 px-4">
-        <Text className="text-4xl font-bold">Thư Viện</Text>
+      <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 100 }}>
+        <Text className="text-4xl font-bold mt-2">Thư Viện</Text>
+        
+        {/* Thanh tìm kiếm - dựa theo OpenReadEra */}
+        <View className="flex-row items-center bg-gray-100 rounded-full px-4 my-4">
+          <Ionicons name="search" size={20} color="#666" />
+          <TextInput
+            className="flex-1 py-2 px-2"
+            placeholder="Tìm kiếm sách..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={fetchPDFs}
+          />
+          {searchQuery ? (
+            <TouchableOpacity 
+              onPress={() => {
+                setSearchQuery('');
+                fetchPDFs();
+              }}
+            >
+              <Ionicons name="close-circle" size={20} color="#666" />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        
+        {/* Bộ lọc và sắp xếp */}
+        <View className="flex-row justify-between mb-4">
+          {/* Lọc theo định dạng */}
+          <TouchableOpacity 
+            className="flex-row items-center bg-white px-3 py-2 rounded-full border border-gray-200"
+            onPress={() => setShowFormatFilter(!showFormatFilter)}
+          >
+            <Ionicons name="funnel-outline" size={16} color="#666" />
+            <Text className="ml-1 text-sm">
+              {selectedFormat ? FILE_FORMATS.find(f => f.id === selectedFormat)?.name : 'Tất cả'}
+            </Text>
+          </TouchableOpacity>
+          
+          {/* Sắp xếp */}
+          <TouchableOpacity 
+            className="flex-row items-center bg-white px-3 py-2 rounded-full border border-gray-200"
+            onPress={() => setShowSortOptions(!showSortOptions)}
+          >
+            <Ionicons name="swap-vertical-outline" size={16} color="#666" />
+            <Text className="ml-1 text-sm">{sortInfo.name}</Text>
+            <Ionicons name={sortInfo.iconName} size={12} color="#666" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+        </View>
+        
+        {/* Tùy chọn lọc định dạng */}
+        {showFormatFilter && (
+          <View className="bg-white rounded-lg p-2 mb-4 border border-gray-200">
+            <TouchableOpacity 
+              className="flex-row items-center py-2 px-2"
+              onPress={() => {
+                setSelectedFormat(null);
+                setShowFormatFilter(false);
+                fetchPDFs();
+              }}
+            >
+              <Ionicons 
+                name={!selectedFormat ? "radio-button-on" : "radio-button-off"} 
+                size={20} 
+                color="#0064e1"
+              />
+              <Text className="ml-2">Tất cả định dạng</Text>
+            </TouchableOpacity>
+            
+            {FILE_FORMATS.map(format => (
+              <TouchableOpacity 
+                key={format.id}
+                className="flex-row items-center py-2 px-2"
+                onPress={() => {
+                  setSelectedFormat(format.id);
+                  setShowFormatFilter(false);
+                  fetchPDFs();
+                }}
+              >
+                <Ionicons 
+                  name={selectedFormat === format.id ? "radio-button-on" : "radio-button-off"} 
+                  size={20} 
+                  color={format.color}
+                />
+                <Ionicons name={format.icon} size={16} color={format.color} style={{ marginLeft: 8 }} />
+                <Text className="ml-2">{format.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        
+        {/* Tùy chọn sắp xếp */}
+        {showSortOptions && (
+          <View className="bg-white rounded-lg p-2 mb-4 border border-gray-200">
+            {[
+              { id: 'recent', name: 'Gần đây nhất', icon: 'time-outline' },
+              { id: 'name', name: 'A-Z', icon: 'text-outline' },
+              { id: 'size', name: 'Kích thước', icon: 'expand-outline' }
+            ].map(option => (
+              <TouchableOpacity 
+                key={option.id}
+                className="flex-row items-center py-2 px-2"
+                onPress={() => toggleSortOption(option.id)}
+              >
+                <Ionicons 
+                  name={sortBy === option.id ? "radio-button-on" : "radio-button-off"} 
+                  size={20} 
+                  color="#0064e1"
+                />
+                <Ionicons name={option.icon} size={16} color="#666" style={{ marginLeft: 8 }} />
+                <Text className="ml-2">{option.name}</Text>
+                
+                {sortBy === option.id && (
+                  <Ionicons 
+                    name={sortDirection === 'asc' ? "arrow-up" : "arrow-down"} 
+                    size={16} 
+                    color="#0064e1" 
+                    style={{ marginLeft: 8 }}
+                  />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         
         {/* Add from device menu */}
         <TouchableOpacity
@@ -214,9 +702,9 @@ export default function Library() {
           <Ionicons name="chevron-forward" size={20} color="#666" />
         </TouchableOpacity>
         
-        {/* Sách có thể đọc */}
+        {/* Sách & Tài Liệu có thể đọc */}
         <View className="mt-6">
-          <Text className="text-2xl font-bold mb-4">Sách & Tài Liệu có thể đọc</Text>
+          <SectionTitle title="Sách & Tài Liệu" />
           
           {loadingPdfs ? (
             <View className="py-10 items-center">
@@ -224,182 +712,39 @@ export default function Library() {
               <Text className="mt-4 text-gray-600">Đang tải danh sách PDF...</Text>
             </View>
           ) : pdfs.length > 0 ? (
-            <View>
-              {pdfs.map((item) => {
-                const progressPercent = getReadingProgress(item.id);
-                return (
-                  <TouchableOpacity 
-                    key={item.id}
-                    className="bg-white shadow-sm rounded-lg p-4 mb-3 flex-row"
-                    onPress={() => handleViewPdf(item.id)}
-                  >
-                    <View className="w-14 h-20 bg-blue-100 rounded-md items-center justify-center mr-4">
-                      <Ionicons name="document-text" size={32} color="#0064e1" />
-                    </View>
-                    
-                    <View className="flex-1">
-                      <Text className="text-base font-bold mb-1">{item.title}</Text>
-                      <Text className="text-xs text-gray-500 mb-2">
-                        {(item.file_size / 1024 / 1024).toFixed(2)} MB
-                      </Text>
-                      
-                      {/* Hiển thị tiến độ đọc */}
-                      <View className="mt-2">
-                        <View className="w-full h-1.5 bg-gray-200 rounded-full">
-                          <View 
-                            className="h-1.5 bg-blue-500 rounded-full" 
-                            style={{ width: `${progressPercent}%` }} 
-                          />
-                        </View>
-                        <View className="flex-row justify-between mt-1">
-                          <Text className="text-xs text-gray-500">
-                            Đã đọc {progressPercent}%
-                          </Text>
-                          {progressPercent >= 100 && (
-                            <Text className="text-xs text-green-600 font-bold">
-                              Đã hoàn thành
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                    
-                    <Ionicons name="chevron-forward" size={20} color="#0064e1" />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <FlatList
+              data={pdfs}
+              renderItem={renderPdfItem}
+              keyExtractor={item => item.id.toString()}
+              scrollEnabled={false}
+              ListFooterComponent={() => (
+                <Text className="text-center text-gray-500 my-4 text-xs">
+                  {pdfs.length} tài liệu
+                </Text>
+              )}
+            />
           ) : (
             <View className="py-6 items-center">
               <Ionicons name="book-outline" size={50} color="#cccccc" />
               <Text className="mt-4 text-gray-500 text-center">
-                Bạn chưa có PDF nào. Hãy tải lên để bắt đầu đọc!
+                {searchQuery 
+                  ? 'Không tìm thấy tài liệu nào phù hợp' 
+                  : selectedFormat 
+                    ? `Không tìm thấy tài liệu ${FILE_FORMATS.find(f => f.id === selectedFormat)?.name}`
+                    : 'Bạn chưa có tài liệu nào. Hãy tải lên để bắt đầu đọc!'}
               </Text>
               <TouchableOpacity 
                 className="mt-4 bg-blue-500 px-6 py-2 rounded-full"
                 onPress={handleAddBooks}
               >
-                <Text className="text-white font-semibold">Tải PDF</Text>
+                <Text className="text-white font-semibold">Tải tài liệu</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
-        
-        {/* Book Collections */}
-        <View className="mt-6 mb-8">
-          <Text className="text-2xl font-bold mb-4">Bộ sưu tập sách</Text>
-          
-          {/* Book Collections List */}
-          {books.map((book) => (
-            <TouchableOpacity
-              key={book.id}
-              className="flex-row items-center py-3 border-b border-gray-100"
-            >
-              {/* Stacked Book Thumbnails */}
-              <View
-                style={{
-                  width: THUMBNAIL_SIZE + 25,
-                  height: THUMBNAIL_SIZE,
-                  marginRight: 14,
-                }}
-              >
-                {/* Third book */}
-                <View
-                  style={{
-                    position: "absolute",
-                    left: 20,
-                    top: 4,
-                    width: THUMBNAIL_SIZE - 16,
-                    height: THUMBNAIL_SIZE - 16,
-                    backgroundColor: book.colors[2],
-                    borderRadius: 8,
-                    borderWidth: 0.5,
-                    borderColor: "rgba(255,255,255,0.2)",
-                    transform: [{ rotate: "-12deg" }],
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.2,
-                    shadowRadius: 1.5,
-                    elevation: 1,
-                  }}
-                />
-
-                {/* Middle book */}
-                <View
-                  style={{
-                    position: "absolute",
-                    left: 10,
-                    top: 2,
-                    width: THUMBNAIL_SIZE - 8,
-                    height: THUMBNAIL_SIZE - 8,
-                    backgroundColor: book.colors[1],
-                    borderRadius: 8,
-                    borderWidth: 0.5,
-                    borderColor: "rgba(255,255,255,0.3)",
-                    transform: [{ rotate: "-6deg" }],
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.25,
-                    shadowRadius: 2.22,
-                    elevation: 2,
-                    zIndex: 1,
-                  }}
-                />
-
-                {/* Foreground book */}
-                <View
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    top: 0,
-                    width: THUMBNAIL_SIZE,
-                    height: THUMBNAIL_SIZE,
-                    backgroundColor: book.colors[0],
-                    borderRadius: 8,
-                    padding: 8,
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.23,
-                    shadowRadius: 2.62,
-                    elevation: 3,
-                    zIndex: 2,
-                  }}
-                >
-                  {/* Icon in white circle */}
-                  <View className="bg-white w-7 h-7 rounded-full items-center justify-center">
-                    <Ionicons name="add" size={18} color={book.colors[0]} />
-                  </View>
-
-                  {/* "Sách" text at bottom */}
-                  <Text className="text-white text-xs font-medium">Sách</Text>
-                </View>
-              </View>
-
-              {/* Title and author */}
-              <View className="flex-1">
-                <Text className="text-base font-medium">{book.title}</Text>
-                <Text className="text-sm text-gray-500 mt-1">
-                  {book.author}
-                </Text>
-                <Text className="text-xs text-gray-400 mt-1">
-                  {book.count} sách
-                </Text>
-              </View>
-
-              {/* More options */}
-              <TouchableOpacity className="p-2">
-                <Ionicons name="ellipsis-horizontal" size={18} color="#666" />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
-          
-          <Text className="text-center text-gray-500 my-8 text-xs">
-            {books.length} bộ sách
-          </Text>
-        </View>
       </ScrollView>
+      
+     
     </SafeAreaView>
   );
 }

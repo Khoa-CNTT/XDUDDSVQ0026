@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, Linking, Alert, Share, Dimensions } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, Linking, Alert, Share, Dimensions, PixelRatio } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system';
@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Slider from '@react-native-community/slider';
+
 
 export default function PdfViewer() {
   const { pdfId, localPath, initialPage } = useLocalSearchParams();
@@ -26,10 +27,17 @@ export default function PdfViewer() {
   const [controlsVisible, setControlsVisible] = useState(true); // Track if controls are visible
   const [bottomMenuVisible, setBottomMenuVisible] = useState(true); // Track if bottom menu is visible
   const [isHighlighterActive, setIsHighlighterActive] = useState(false); // Track if highlighter is active
+  const [slidingValue, setSlidingValue] = useState(1); // Add new state for tracking during sliding
+
 
   // Get screen dimensions for better PDF scaling
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
+  const pixelRatio = PixelRatio.get(); // Get device pixel ratio for better resolution
+
+  // Reference to track if the PDF has loaded
+  const pdfLoadedRef = useRef(false);
+
 
   useEffect(() => {
     console.log(`PdfViewer initialized with pdfId: ${pdfId}, initialPage: ${initialPage || 1}`);
@@ -37,7 +45,7 @@ export default function PdfViewer() {
       try {
         setLoading(true);
         setError(null);
-        
+       
         if (localPath) {
           await handleLocalFile(decodeURIComponent(localPath));
         } else if (pdfId) {
@@ -56,18 +64,19 @@ export default function PdfViewer() {
         setLoading(false);
       }
     };
-    
+   
     loadPdf();
   }, [pdfId, localPath, viewMethod, initialPage]);
+
 
   // Save reading progress whenever current page changes
   useEffect(() => {
     if (pdfId && totalPages > 1) {
       saveReadingProgress();
-      
+     
       // Calculate reading progress percentage
       const progress = Math.floor((currentPage / totalPages) * 100);
-      
+     
       // Only update if it's valid (greater than 0) and the PDF has properly loaded
       if (progress > 0 || totalPages > 1) {
         setReadingProgress(progress);
@@ -75,31 +84,32 @@ export default function PdfViewer() {
         // Use saved percentage until PDF fully loads
         setReadingProgress(savedProgressPercentage);
       }
-      
+     
       console.log(`Progress updated: ${progress}% (Page ${currentPage}/${totalPages})`);
     }
   }, [currentPage, totalPages, pdfId, savedProgressPercentage]);
 
+
   const loadReadingProgress = async () => {
     if (!pdfId) return;
-    
+   
     try {
       // Load from local storage only (database sync removed)
       const key = `pdf_progress_${pdfId}`;
       const savedProgress = await AsyncStorage.getItem(key);
-      
+     
       if (savedProgress) {
         try {
           const progress = JSON.parse(savedProgress);
           const page = parseInt(progress.page, 10) || 1;
           const total = parseInt(progress.total, 10) || 1;
-          
+         
           console.log(`Loaded reading progress from local storage: page ${page}/${total}`);
-          
+         
           // Set page and total in state
           setCurrentPage(page);
           setTotalPages(total);
-          
+         
           // If percentage is saved, use it directly
           if (progress.percentage) {
             setSavedProgressPercentage(progress.percentage);
@@ -124,13 +134,14 @@ export default function PdfViewer() {
     }
   };
 
+
   const saveReadingProgress = async () => {
     if (!pdfId || totalPages <= 1) return;
-    
+   
     try {
       // Calculate current progress percentage
       const progressPercentage = Math.floor((currentPage / totalPages) * 100);
-      
+     
       // Save to AsyncStorage (local) only
       const key = `pdf_progress_${pdfId}`;
       const progressData = JSON.stringify({
@@ -139,36 +150,62 @@ export default function PdfViewer() {
         percentage: progressPercentage,
         timestamp: new Date().toISOString()
       });
-      
+     
       await AsyncStorage.setItem(key, progressData);
       console.log(`Saved reading progress locally: page ${currentPage}/${totalPages} (${progressPercentage}%)`);
-      
+     
       // Update the saved percentage
       setSavedProgressPercentage(progressPercentage);
       
-      // NOTE: Database saving functionality removed to avoid API errors
+      // Update recently viewed documents list to improve sync between screens
+      try {
+        const recentlyViewedKey = 'recently_viewed_docs';
+        let recentlyViewed = [];
+        const recentlyViewedJson = await AsyncStorage.getItem(recentlyViewedKey);
+        
+        if (recentlyViewedJson) {
+          recentlyViewed = JSON.parse(recentlyViewedJson);
+        }
+        
+        // Add current PDF to the top if not already there, or move to top if exists
+        const pdfIdStr = pdfId.toString();
+        recentlyViewed = recentlyViewed.filter(id => id !== pdfIdStr);
+        recentlyViewed.unshift(pdfIdStr);
+        
+        // Keep only the most recent 10 items
+        if (recentlyViewed.length > 10) {
+          recentlyViewed = recentlyViewed.slice(0, 10);
+        }
+        
+        await AsyncStorage.setItem(recentlyViewedKey, JSON.stringify(recentlyViewed));
+      } catch (recentError) {
+        console.error('Error updating recently viewed list:', recentError);
+      }
       
+      // NOTE: Database saving functionality removed to avoid API errors
+     
     } catch (error) {
       console.error('Error saving reading progress:', error);
     }
   };
 
+
   const handleLocalFile = async (filePath) => {
     console.log('Loading local PDF file:', filePath);
-    
+   
     // Check if file exists
     const fileInfo = await FileSystem.getInfoAsync(filePath);
     if (!fileInfo.exists) {
       throw new Error('Local PDF file not found');
     }
-    
+   
     console.log('File size:', fileInfo.size, 'bytes');
     if (fileInfo.size === 0) {
       throw new Error('PDF file is empty');
     }
-    
+   
     setFileUri(filePath);
-    
+   
     // For local files, we need to get a content URI on Android for permissions
     let pdfPath = filePath;
     if (Platform.OS === 'android') {
@@ -180,7 +217,7 @@ export default function PdfViewer() {
         console.warn('Could not get content URI, using file path directly:', err);
       }
     }
-    
+   
     // Based on selected view method
     if (viewMethod === 'direct') {
       createDirectWebViewHTML(pdfPath);
@@ -189,22 +226,23 @@ export default function PdfViewer() {
     } else if (viewMethod === 'pdfjs') {
       createPdfJsHTML(filePath);
     }
-    
+   
     // Get PDF info if available and we have pdfId
     if (pdfId) {
       await fetchPdfInfo();
     }
-    
+   
     setLoading(false);
   };
+
 
   const createDirectWebViewHTML = (path) => {
     console.log('Using direct WebView embedding for PDF:', path);
     // Handle file:// URLs properly
-    const formattedPath = path.startsWith('file://') 
-      ? path 
+    const formattedPath = path.startsWith('file://')
+      ? path
       : (Platform.OS === 'ios' ? path : `file://${path}`);
-    
+   
     // Use an optimized HTML setup with embedded PDF
     const html = `
       <!DOCTYPE html>
@@ -298,17 +336,17 @@ export default function PdfViewer() {
               type="application/pdf"
               width="100%"
               height="100%">
-                <p>It appears you don't have a PDF plugin for this browser. No worries, you can 
+                <p>It appears you don't have a PDF plugin for this browser. No worries, you can
                 <a href="${formattedPath}">click here to download the PDF file.</a></p>
             </object>
           </div>
-          
+         
           <script>
             // Monitor PDF loading
             const viewer = document.getElementById('pdf-viewer');
             const loading = document.getElementById('loading');
             const errorMsg = document.getElementById('error-message');
-            
+           
             // Set timeout to detect if PDF fails to load - reduced from 8000 to 5000ms
             let loadTimeout = setTimeout(() => {
               loading.style.display = 'none';
@@ -316,14 +354,14 @@ export default function PdfViewer() {
               errorMsg.textContent = 'PDF failed to load. Please try another viewing method.';
               window.ReactNativeWebView.postMessage('PDF_LOAD_TIMEOUT');
             }, 5000);
-            
+           
             // Check if viewer loaded successfully
             viewer.onload = function() {
               loading.style.display = 'none';
               clearTimeout(loadTimeout);
               window.ReactNativeWebView.postMessage('PDF_LOADED');
             };
-            
+           
             viewer.onerror = function() {
               loading.style.display = 'none';
               errorMsg.style.display = 'block';
@@ -338,6 +376,7 @@ export default function PdfViewer() {
     setHtmlContent(html);
   };
 
+
   const createBase64HTML = async (path) => {
     try {
       console.log("Creating base64 HTML for PDF:", path);
@@ -345,7 +384,7 @@ export default function PdfViewer() {
       const base64 = await FileSystem.readAsStringAsync(path, {
         encoding: FileSystem.EncodingType.Base64,
       });
-      
+     
       // Generate HTML with embedded base64 data
       const html = `
         <!DOCTYPE html>
@@ -393,20 +432,20 @@ export default function PdfViewer() {
                 <p>Your browser doesn't support PDF embedding.</p>
               </object>
             </div>
-            
+           
             <script>
               const viewer = document.getElementById('pdf-viewer');
               const errorMsg = document.getElementById('error-message');
-              
+             
               // If base64 data is too large, notify React Native
               if ('${base64}'.length > 5000000) {
                 window.ReactNativeWebView.postMessage('BASE64_LARGE');
               }
-              
+             
               viewer.onload = function() {
                 window.ReactNativeWebView.postMessage('PDF_LOADED');
               };
-              
+             
               viewer.onerror = function() {
                 errorMsg.style.display = 'block';
                 errorMsg.textContent = 'Error loading PDF using base64.';
@@ -423,16 +462,17 @@ export default function PdfViewer() {
     }
   };
 
+
   const createPdfJsHTML = (path) => {
     console.log("Using PDF.js viewer for:", path);
-    
+   
     // Always use the embedded PDF.js approach instead of the remote viewer URL
     // This approach works reliably on all devices
     const html = `
       <!DOCTYPE html>
       <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+          <meta name="viewport" content="width=device-width, initial-scale=${1/pixelRatio}, maximum-scale=5.0, user-scalable=yes">
           <!-- Preload PDF.js resources to improve loading time -->
           <link rel="preload" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js" as="script">
           <link rel="preload" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.worker.min.js" as="script">
@@ -462,12 +502,13 @@ export default function PdfViewer() {
               z-index: 999;
             }
             .spinner {
-              border: 4px solid rgba(0, 0, 0, 0.1);
-              width: 36px;
-              height: 36px;
+              border: 6px solid rgba(0, 0, 0, 0.1);
+              width: 50px;
+              height: 50px;
               border-radius: 50%;
               border-left-color: #3b82f6;
               animation: spin 1s ease infinite;
+              margin-bottom: 15px;
             }
             @keyframes spin {
               0% { transform: rotate(0deg); }
@@ -484,14 +525,15 @@ export default function PdfViewer() {
               right: 0;
               bottom: 0;
               -webkit-overflow-scrolling: touch;
+              padding-top: 60px; /* Push content down to account for header */
             }
             .page-canvas {
-              margin: 10px auto;
+              margin: 0 auto;
               display: block;
-              border: 1px solid #ddd;
-              box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+              border: none;
               background: white;
               will-change: transform;
+              width: 100% !important;
             }
             #page-info {
               position: fixed;
@@ -527,8 +569,17 @@ export default function PdfViewer() {
             }
             /* Add loading text */
             #loading p {
-              margin-top: 10px;
+              margin-top: 15px;
               color: #333;
+              font-size: 22px;
+              font-weight: 500;
+              text-align: center;
+            }
+            .loading-progress {
+              font-size: 20px;
+              margin-top: 10px;
+              color: #3b82f6;
+              font-weight: bold;
             }
             /* Highlighter styles */
             .highlighter-enabled {
@@ -551,43 +602,47 @@ export default function PdfViewer() {
           <div id="loading">
             <div class="spinner"></div>
             <p>Loading PDF...</p>
+            <div class="loading-progress" id="loading-progress">Preparing document...</div>
           </div>
-          
+         
           <div id="progress-bar-container">
             <div id="progress-bar" style="width: ${readingProgress}%"></div>
           </div>
-          
+         
           <div id="pdf-container"></div>
-          
+         
           <div id="page-info" class="fade">Page ${currentPage} of 1</div>
-          
+         
           <script>
             // Configure PDF.js worker
             pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.worker.min.js';
-            
+           
             // Variables for PDF rendering
             let pdfDoc = null;
             let currentPage = ${currentPage};
-            let scale = 1.0;
+            let scale = 2.0; // Increased scale for better visibility
             let pageRendering = false;
             let pageNumPending = null;
             const container = document.getElementById('pdf-container');
             const loading = document.getElementById('loading');
+            const loadingProgress = document.getElementById('loading-progress');
             const pageInfo = document.getElementById('page-info');
             const progressBar = document.getElementById('progress-bar');
-            
-            // Calculate initial scale to fit width of phone screen
+           
+            // Calculate initial scale to fit width of phone screen with pixel ratio
             const screenWidth = ${screenWidth};
-            const initialScale = (screenWidth - 20) / 612; // Standard PDF width is 612 points
+            const pixelRatio = ${pixelRatio};
+            // Adjust scale to make PDF fit full width
+            const initialScale = Math.max(1.5, (screenWidth / 612)); // Ensure minimum scale of 1.5
             scale = initialScale;
-            
+           
             // Variables for touch handling
             let touchStartX = 0;
             let touchEndX = 0;
             let touchStartY = 0;
             let touchEndY = 0;
             let lastTap = 0;
-            
+           
             // Variables for highlighting
             let isHighlighterEnabled = false;
             let isHighlighting = false;
@@ -595,7 +650,7 @@ export default function PdfViewer() {
             let highlightStartY = 0;
             let highlightLayer = null;
             let highlights = [];
-            
+           
             // Auto-hide page info after delay
             let pageInfoTimeout;
             function showPageInfo() {
@@ -606,29 +661,30 @@ export default function PdfViewer() {
               }, 2000);
             }
 
+
             // Function to store the current viewer state
             function logState() {
               console.log('Current state: Page ' + currentPage + ' of ' + (pdfDoc ? pdfDoc.numPages : 'unknown') + ' at scale ' + scale);
             }
-            
+           
             // Optimized rendering function
             function renderPage(num) {
               if (!pdfDoc) return;
-              
+             
               if (num < 1) num = 1;
               if (num > pdfDoc.numPages) num = pdfDoc.numPages;
-              
+             
               pageRendering = true;
               pageInfo.textContent = 'Page ' + num + ' of ' + pdfDoc.numPages;
               showPageInfo();
-              
+             
               currentPage = num;
-              
+             
               const progress = Math.floor((currentPage / pdfDoc.numPages) * 100);
               progressBar.style.width = progress + '%';
-              
+             
               window.ReactNativeWebView.postMessage('PAGE_CHANGE:' + currentPage + ':' + pdfDoc.numPages);
-              
+             
               const oldCanvas = container.querySelector('.page-canvas');
               if (oldCanvas) {
                 oldCanvas.style.opacity = '0.3';
@@ -637,23 +693,31 @@ export default function PdfViewer() {
                   container.removeChild(container.firstChild);
                 }
               }
-              
+             
               requestAnimationFrame(() => {
                 pdfDoc.getPage(num).then(function(page) {
                   const viewport = page.getViewport({ scale: scale });
                   const canvas = document.createElement('canvas');
                   canvas.className = 'page-canvas';
                   canvas.style.opacity = '0';
-                  canvas.width = viewport.width;
-                  canvas.height = viewport.height;
+                 
+                  // Set canvas dimensions with pixel ratio for higher resolution
+                  const outputScale = pixelRatio;
+                  canvas.width = Math.floor(viewport.width * outputScale);
+                  canvas.height = Math.floor(viewport.height * outputScale);
+                 
+                  // Set canvas style width to 100% of container
+                  canvas.style.width = '100%';
+                  canvas.style.maxWidth = 'none';
+                 
                   container.appendChild(canvas);
-                  
+                 
                   // Create/recreate highlight layer
                   const oldHighlightLayer = container.querySelector('.highlight-layer');
                   if (oldHighlightLayer) {
                     container.removeChild(oldHighlightLayer);
                   }
-                  
+                 
                   highlightLayer = document.createElement('div');
                   highlightLayer.className = 'highlight-layer';
                   highlightLayer.style.width = viewport.width + 'px';
@@ -662,40 +726,43 @@ export default function PdfViewer() {
                   highlightLayer.style.left = canvas.offsetLeft + 'px';
                   highlightLayer.style.top = canvas.offsetTop + 'px';
                   container.appendChild(highlightLayer);
-                  
+                 
                   // Restore highlights for this page
                   renderHighlights(num);
-                  
+                 
+                  const ctx = canvas.getContext('2d');
+                  ctx.scale(outputScale, outputScale);
+                 
                   const renderContext = {
-                    canvasContext: canvas.getContext('2d'),
+                    canvasContext: ctx,
                     viewport: viewport
                   };
-                  
+                 
                   const renderTask = page.render(renderContext);
-                  
+                 
                   renderTask.promise.then(function() {
                     pageRendering = false;
-                    
+                   
                     if (oldCanvas) {
                       container.removeChild(oldCanvas);
                     }
-                    
+                   
                     requestAnimationFrame(() => {
                       canvas.style.transition = 'opacity 0.2s';
                       canvas.style.opacity = '1';
                     });
-                    
+                   
                     if (pageNumPending !== null) {
                       renderPage(pageNumPending);
                       pageNumPending = null;
                     }
                   });
                 });
-                
+               
                 container.scrollTop = 0;
               });
             }
-            
+           
             // Queue functions
             function queueRenderPage(num) {
               if (pageRendering) {
@@ -704,18 +771,18 @@ export default function PdfViewer() {
                 renderPage(num);
               }
             }
-            
+           
             // Navigation functions
             function goToPrevPage() {
               if (currentPage <= 1) return;
               queueRenderPage(currentPage - 1);
             }
-            
+           
             function goToNextPage() {
               if (currentPage >= pdfDoc.numPages) return;
               queueRenderPage(currentPage + 1);
             }
-            
+           
             // Touch navigation setup
             function handleTouchStart(evt) {
               // Skip if highlighter is enabled
@@ -728,10 +795,10 @@ export default function PdfViewer() {
                 }
                 return;
               }
-              
+             
               touchStartX = evt.changedTouches[0].screenX;
               touchStartY = evt.changedTouches[0].screenY;
-              
+             
               // Detect single tap for toggling menu
               const currentTime = new Date().getTime();
               const tapLength = currentTime - lastTap;
@@ -742,72 +809,72 @@ export default function PdfViewer() {
                 lastTap = currentTime;
               }
             }
-            
+           
             function handleTouchMove(evt) {
               if (isHighlighterEnabled && isHighlighting) {
                 const touch = evt.touches[0];
                 const currentX = touch.clientX - container.getBoundingClientRect().left;
                 const currentY = touch.clientY - container.getBoundingClientRect().top + container.scrollTop;
-                
+               
                 // Remove previous temporary highlight
                 const tempHighlight = highlightLayer.querySelector('.temp-highlight');
                 if (tempHighlight) {
                   highlightLayer.removeChild(tempHighlight);
                 }
-                
+               
                 // Create new temporary highlight
                 const highlight = document.createElement('div');
                 highlight.className = 'highlight temp-highlight';
-                
+               
                 // Calculate position and dimensions
                 const left = Math.min(highlightStartX, currentX);
                 const top = Math.min(highlightStartY, currentY);
                 const width = Math.abs(currentX - highlightStartX);
                 const height = Math.abs(currentY - highlightStartY);
-                
+               
                 highlight.style.left = left + 'px';
                 highlight.style.top = top + 'px';
                 highlight.style.width = width + 'px';
                 highlight.style.height = height + 'px';
-                
+               
                 highlightLayer.appendChild(highlight);
               }
             }
-            
+           
             function handleTouchEnd(evt) {
               touchEndX = evt.changedTouches[0].screenX;
               touchEndY = evt.changedTouches[0].screenY;
-              
+             
               // If highlighting, complete the highlight
               if (isHighlighterEnabled && isHighlighting) {
                 const touch = evt.changedTouches[0];
                 const currentX = touch.clientX - container.getBoundingClientRect().left;
                 const currentY = touch.clientY - container.getBoundingClientRect().top + container.scrollTop;
-                
+               
                 // Only create highlight if it has some size
                 const width = Math.abs(currentX - highlightStartX);
                 const height = Math.abs(currentY - highlightStartY);
-                
+               
                 if (width > 5 && height > 5) {
                   // Remove temporary highlight
                   const tempHighlight = highlightLayer.querySelector('.temp-highlight');
                   if (tempHighlight) {
                     highlightLayer.removeChild(tempHighlight);
                   }
-                  
+                 
                   // Create permanent highlight
                   const left = Math.min(highlightStartX, currentX);
                   const top = Math.min(highlightStartY, currentY);
-                  
+                 
                   const highlight = document.createElement('div');
                   highlight.className = 'highlight';
                   highlight.style.left = left + 'px';
                   highlight.style.top = top + 'px';
                   highlight.style.width = width + 'px';
                   highlight.style.height = height + 'px';
-                  
+                 
                   highlightLayer.appendChild(highlight);
-                  
+                 
                   // Store highlight data
                   highlights.push({
                     page: currentPage,
@@ -816,30 +883,30 @@ export default function PdfViewer() {
                     width: width,
                     height: height
                   });
-                  
+                 
                   // Save highlights
                   saveHighlights();
                 }
-                
+               
                 isHighlighting = false;
                 return;
               }
-              
+             
               // Calculate distance moved
               const deltaX = Math.abs(touchEndX - touchStartX);
               const deltaY = Math.abs(touchEndY - touchStartY);
-              
+             
               // If it's a swipe (significant horizontal movement and not too much vertical movement)
               if (deltaX > 75 && deltaY < 50) {
                 handleSwipe();
-              } 
+              }
               // If it's a tap (very little movement in any direction)
               else if (deltaX < 10 && deltaY < 10) {
                 // Toggle menu on tap
                 window.ReactNativeWebView.postMessage('TOGGLE_MENU');
               }
             }
-            
+           
             function handleSwipe() {
               const swipeThreshold = 75; // Minimum distance for swipe
               if (touchEndX < touchStartX - swipeThreshold) {
@@ -851,7 +918,7 @@ export default function PdfViewer() {
                 goToPrevPage();
               }
             }
-            
+           
             // Highlighter functions
             function toggleHighlighter(enabled) {
               isHighlighterEnabled = enabled;
@@ -862,12 +929,12 @@ export default function PdfViewer() {
                 isHighlighting = false;
               }
             }
-            
+           
             function saveHighlights() {
               const highlightsData = JSON.stringify(highlights);
               localStorage.setItem('pdf_highlights_' + document.location.href, highlightsData);
             }
-            
+           
             function loadHighlights() {
               try {
                 const highlightsData = localStorage.getItem('pdf_highlights_' + document.location.href);
@@ -879,13 +946,13 @@ export default function PdfViewer() {
                 console.error('Error loading highlights:', e);
               }
             }
-            
+           
             function renderHighlights(pageNum) {
               if (!highlightLayer) return;
-              
+             
               // Clear existing highlights
               highlightLayer.innerHTML = '';
-              
+             
               // Add highlights for current page
               highlights.filter(h => h.page === pageNum).forEach(h => {
                 const highlight = document.createElement('div');
@@ -897,76 +964,76 @@ export default function PdfViewer() {
                 highlightLayer.appendChild(highlight);
               });
             }
-            
+           
             // Add touch event listeners
             document.addEventListener('touchstart', handleTouchStart, false);
             document.addEventListener('touchmove', handleTouchMove, false);
             document.addEventListener('touchend', handleTouchEnd, false);
-            
+           
             // Zoom functions
             function onZoomIn() {
               scale += 0.2;
               queueRenderPage(currentPage);
             }
-            
+           
             function onZoomOut() {
               if (scale <= 0.4) return;
               scale -= 0.2;
               queueRenderPage(currentPage);
             }
-            
+           
             function onFitWidth() {
               scale = initialScale;
               queueRenderPage(currentPage);
             }
-            
+           
             // Optimized PDF loading
             async function renderPDF() {
               try {
                 setTimeout(() => {
                   window.ReactNativeWebView.postMessage('REQUEST_PDF_DATA');
                 }, 100);
-                
+               
                 window.handlePdfData = async function(base64Data) {
                   try {
-                    const loadingText = document.querySelector('#loading p');
-                    loadingText.textContent = 'Preparing document...';
-                    
+                    loadingProgress.textContent = 'Preparing document...';
+                   
                     setTimeout(async () => {
                       try {
                         const binaryString = window.atob(base64Data);
                         const bytes = new Uint8Array(binaryString.length);
-                        
+                       
                         const chunkSize = 10000;
                         for (let i = 0; i < binaryString.length; i += chunkSize) {
                           const chunk = Math.min(chunkSize, binaryString.length - i);
                           for (let j = 0; j < chunk; j++) {
                             bytes[i + j] = binaryString.charCodeAt(i + j);
                           }
-                          
+                         
                           if (i + chunk < binaryString.length) {
-                            loadingText.textContent = 'Processing PDF... ' + Math.floor((i / binaryString.length) * 100) + '%';
+                            const progress = Math.floor((i / binaryString.length) * 100);
+                            loadingProgress.textContent = 'Processing PDF... ' + progress + '%';
                             await new Promise(resolve => setTimeout(resolve, 0));
                           }
                         }
-                        
-                        loadingText.textContent = 'Loading document...';
-                        
+                       
+                        loadingProgress.textContent = 'Loading document...';
+                       
                         const loadingTask = pdfjsLib.getDocument({ data: bytes.buffer });
                         pdfDoc = await loadingTask.promise;
-                        
+                       
                         window.ReactNativeWebView.postMessage('TOTAL_PAGES:' + pdfDoc.numPages);
-                        
+                       
                         if (currentPage > pdfDoc.numPages) {
                           currentPage = 1;
                         }
-                        
+                       
                         loading.style.display = 'none';
-                        
+                       
                         console.log('Opening PDF at page ' + currentPage);
                         renderPage(currentPage);
                         loadHighlights();
-                        
+                       
                         window.ReactNativeWebView.postMessage('PDF_LOADED');
                       } catch (error) {
                         console.error('Error rendering PDF:', error);
@@ -986,7 +1053,7 @@ export default function PdfViewer() {
                 loading.style.display = 'none';
               }
             }
-            
+           
             // Start rendering when page loads
             renderPDF();
           </script>
@@ -996,13 +1063,14 @@ export default function PdfViewer() {
     setHtmlContent(html);
   };
 
+
   const fetchPdfInfo = async () => {
     if (!pdfId) return;
-    
+   
     try {
       const token = await AsyncStorage.getItem('token');
       if (!token) return;
-      
+     
       const response = await fetch(`${API_URL}/pdfs/${pdfId}`, {
         method: 'GET',
         headers: {
@@ -1010,7 +1078,7 @@ export default function PdfViewer() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+     
       const data = await response.json();
       if (data.success) {
         setPdfInfo(data.data);
@@ -1020,6 +1088,7 @@ export default function PdfViewer() {
     }
   };
 
+
   const downloadPdf = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -1027,28 +1096,28 @@ export default function PdfViewer() {
         router.replace('/(auth)/LogIn');
         return;
       }
-      
+     
       // First get PDF info
       await fetchPdfInfo();
-      
+     
       // Create direct API URL for the PDF
       const directUrl = `${API_URL}/pdfs/${pdfId}/download`;
-      
+     
       // Check for local PDF file in document directory
       const fileName = `pdf_${pdfId}.pdf`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      
+     
       setFileUri(fileUri);
-      
+     
       // For all view methods, download the file first for consistency
       console.log('Downloading PDF to local storage...');
-      
+     
       // Check if file already exists
       const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      
+     
       if (fileInfo.exists && fileInfo.size > 0) {
         console.log('Using existing downloaded file:', fileUri);
-        
+       
         if (viewMethod === 'direct') {
           createDirectWebViewHTML(fileUri);
         } else if (viewMethod === 'base64') {
@@ -1056,12 +1125,12 @@ export default function PdfViewer() {
         } else if (viewMethod === 'pdfjs') {
           createPdfJsHTML(fileUri);
         }
-        
+       
         setLoading(false);
       } else {
         // Download the file
         console.log('Downloading file to:', fileUri);
-        
+       
         try {
           const downloadResumable = FileSystem.createDownloadResumable(
             directUrl,
@@ -1076,12 +1145,12 @@ export default function PdfViewer() {
               console.log(`PDF download progress: ${progress * 100}%`);
             }
           );
-          
+         
           const downloadResult = await downloadResumable.downloadAsync();
-          
+         
           if (downloadResult && downloadResult.uri) {
             console.log('Download successful:', downloadResult.uri);
-            
+           
             // Get content URI for Android
             let contentUri = downloadResult.uri;
             if (Platform.OS === 'android') {
@@ -1092,7 +1161,7 @@ export default function PdfViewer() {
                 console.warn('Could not get content URI, using file path directly:', err);
               }
             }
-            
+           
             if (viewMethod === 'direct') {
               createDirectWebViewHTML(contentUri);
             } else if (viewMethod === 'base64') {
@@ -1100,7 +1169,7 @@ export default function PdfViewer() {
             } else if (viewMethod === 'pdfjs') {
               createPdfJsHTML(contentUri);
             }
-            
+           
             setLoading(false);
           } else {
             throw new Error('Download completed but no file was returned');
@@ -1117,13 +1186,14 @@ export default function PdfViewer() {
     }
   };
 
+
   const sharePdf = async () => {
     try {
       if (!fileUri) {
         Alert.alert('Error', 'No PDF file available to share');
         return;
       }
-      
+     
       if (await Sharing.isAvailableAsync()) {
         console.log('Sharing file:', fileUri);
         await Sharing.shareAsync(fileUri, {
@@ -1139,6 +1209,7 @@ export default function PdfViewer() {
     }
   };
 
+
   const openExternal = async () => {
     try {
       if (fileUri) {
@@ -1147,7 +1218,7 @@ export default function PdfViewer() {
           try {
             const contentUri = await FileSystem.getContentUriAsync(fileUri);
             console.log('Opening content URI in external app:', contentUri);
-            
+           
             const canOpen = await Linking.canOpenURL(contentUri);
             if (canOpen) {
               await Linking.openURL(contentUri);
@@ -1158,7 +1229,7 @@ export default function PdfViewer() {
             // Fall through to other methods
           }
         }
-        
+       
         // Next try sharing (works on both platforms)
         try {
           if (await Sharing.isAvailableAsync()) {
@@ -1172,7 +1243,7 @@ export default function PdfViewer() {
         } catch (err) {
           console.warn('Error sharing file:', err);
         }
-        
+       
         // Finally try direct Linking (less reliable)
         try {
           console.log('Trying to open file directly:', fileUri);
@@ -1185,7 +1256,7 @@ export default function PdfViewer() {
           console.warn('Error opening file with Linking:', err);
         }
       }
-      
+     
       // As a last resort, try to open the remote URL
       if (pdfId) {
         try {
@@ -1204,6 +1275,7 @@ export default function PdfViewer() {
     }
   };
 
+
   const changeViewMethod = () => {
     // Cycle through view methods, but in a different order to prioritize working methods
     if (viewMethod === 'pdfjs') {
@@ -1214,7 +1286,7 @@ export default function PdfViewer() {
       setViewMethod('pdfjs');
     }
   };
-  
+ 
   const showDebugInfo = () => {
     Alert.alert(
       'Debug Info',
@@ -1222,20 +1294,34 @@ export default function PdfViewer() {
       [{ text: 'OK' }]
     );
   };
-  
+ 
   const handleWebViewMessage = (event) => {
     const message = event.nativeEvent.data;
     console.log('WebView message:', message);
-    
+   
     if (message === 'TOGGLE_MENU') {
       toggleBottomMenu();
     }
-    
+   
     if (message.includes('PDF_LOAD_ERROR') || message.includes('PDF_LOAD_TIMEOUT')) {
       console.warn(`PDF loading issue detected: ${message}`);
       setError('Failed to load PDF. ' + message);
     }
     
+    // Track when PDF has fully loaded
+    if (message === 'PDF_LOADED') {
+      pdfLoadedRef.current = true;
+      
+      // If we have a saved page position, navigate to it
+      if (currentPage > 1 && webViewRef.current) {
+        console.log(`PDF loaded - navigating to saved page: ${currentPage}`);
+        webViewRef.current.injectJavaScript(`
+          queueRenderPage(${currentPage});
+          true;
+        `);
+      }
+    }
+   
     if (message === 'REQUEST_PDF_DATA' && fileUri) {
       // WebView is requesting PDF data for PDF.js viewer
       // Read the file and send it back to the WebView
@@ -1244,7 +1330,7 @@ export default function PdfViewer() {
           const base64Data = await FileSystem.readAsStringAsync(fileUri, {
             encoding: FileSystem.EncodingType.Base64,
           });
-          
+         
           // Use webViewRef.current instead of this.webViewRef
           if (webViewRef.current) {
             webViewRef.current.injectJavaScript(`handlePdfData("${base64Data}"); true;`);
@@ -1255,7 +1341,7 @@ export default function PdfViewer() {
         }
       })();
     }
-    
+   
     // Handle page change messages
     if (message.startsWith('PAGE_CHANGE:')) {
       const parts = message.split(':');
@@ -1268,7 +1354,7 @@ export default function PdfViewer() {
         }
       }
     }
-    
+   
     // Handle total pages message
     if (message.startsWith('TOTAL_PAGES:')) {
       const total = parseInt(message.split(':')[1], 10);
@@ -1277,7 +1363,7 @@ export default function PdfViewer() {
       }
     }
   };
-  
+ 
   // Handlers to control PDF.js viewer via WebView injection
   const handleZoomIn = () => {
     if (webViewRef.current) {
@@ -1285,37 +1371,53 @@ export default function PdfViewer() {
     }
   };
 
+
   const handleZoomOut = () => {
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(`onZoomOut(); true;`);
     }
   };
 
+
   const handleFitWidth = () => {
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(`onFitWidth(); true;`);
     }
   };
-  
+ 
   // Function to toggle the bottom menu
   const toggleBottomMenu = () => {
     setBottomMenuVisible(prev => !prev);
     // Also show/hide top controls when toggling bottom menu
     setControlsVisible(prev => !prev);
   };
-  
+ 
   // Function to toggle highlighter tool
   const toggleHighlighter = () => {
     const newState = !isHighlighterActive;
     setIsHighlighterActive(newState);
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(`
-        toggleHighlighter(${newState}); 
+        toggleHighlighter(${newState});
         true;
       `);
     }
   };
-  
+ 
+  // Update slidingValue when currentPage changes
+  useEffect(() => {
+    setSlidingValue(currentPage);
+    
+    // If loading a PDF with saved progress, ensure the viewer goes to the saved page
+    if (webViewRef.current && currentPage > 1) {
+      webViewRef.current.injectJavaScript(`
+        queueRenderPage(${currentPage});
+        true;
+      `);
+    }
+  }, [currentPage]);
+
+
   // Function to handle page slider change
   const handlePageChange = (pageNumber) => {
     const page = Math.round(pageNumber);
@@ -1328,11 +1430,12 @@ export default function PdfViewer() {
     }
   };
 
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={[
-        styles.header, 
+        styles.header,
         controlsVisible ? null : styles.headerHidden
       ]}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -1341,7 +1444,7 @@ export default function PdfViewer() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {pdfInfo?.title || 'PDF Viewer'}
         </Text>
-        
+       
         {/* Zoom controls */}
         <View style={styles.zoomControls}>
           <TouchableOpacity style={styles.zoomButton} onPress={handleZoomOut}>
@@ -1354,11 +1457,12 @@ export default function PdfViewer() {
             <Text style={styles.zoomText}>Fit</Text>
           </TouchableOpacity>
         </View>
-        
+       
         <TouchableOpacity style={styles.debugButton} onPress={showDebugInfo}>
           <Icon name="info" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
+
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -1369,7 +1473,7 @@ export default function PdfViewer() {
         <View style={styles.errorContainer}>
           <Icon name="error-outline" size={64} color="#ff0000" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.shareButton}
             onPress={sharePdf}
           >
@@ -1401,46 +1505,47 @@ export default function PdfViewer() {
               console.error('WebView HTTP error:', nativeEvent);
               setError(`HTTP error ${nativeEvent.statusCode}: ${nativeEvent.description || 'Unknown error'}`);
             }}
-            scalesPageToFit={true}
+            scalesPageToFit={Platform.OS === 'android'}
+            decelerationRate={0.998}
             onContentSizeChange={() => console.log('Content size changed')}
           />
-          
+         
           {/* Reading progress indicator */}
           <View style={styles.progressBarContainer}>
-            <View 
-              style={[styles.progressBar, { width: `${readingProgress}%` }]} 
+            <View
+              style={[styles.progressBar, { width: `${readingProgress}%` }]}
             />
             {savedProgressPercentage !== null && (
-              <View 
-                style={[styles.savedProgressMarker, { left: `${savedProgressPercentage}%` }]} 
+              <View
+                style={[styles.savedProgressMarker, { left: `${savedProgressPercentage}%` }]}
               />
             )}
           </View>
-          
+         
           {/* Bottom menu bar */}
           <View style={[
-            styles.bottomMenu, 
+            styles.bottomMenu,
             bottomMenuVisible ? null : styles.bottomMenuHidden
           ]}>
             <Slider
               style={styles.pageSlider}
               minimumValue={1}
               maximumValue={totalPages}
-              value={currentPage}
+              value={slidingValue}
               step={1}
-              onValueChange={(value) => setCurrentPage(Math.round(value))}
-              onSlidingComplete={(value) => handlePageChange(value)}
+              onValueChange={(value) => setSlidingValue(Math.round(value))}
+              onSlidingComplete={(value) => handlePageChange(Math.round(value))}
               minimumTrackTintColor="#3b82f6"
               maximumTrackTintColor="#d1d5db"
               thumbTintColor="#3b82f6"
             />
             <View style={styles.pageInfo}>
               <Text style={styles.pageText}>
-                {currentPage} / {totalPages}
+                {slidingValue} / {totalPages}
               </Text>
             </View>
-            <TouchableOpacity 
-              style={[styles.highlighterButton, isHighlighterActive && styles.highlighterActive]} 
+            <TouchableOpacity
+              style={[styles.highlighterButton, isHighlighterActive && styles.highlighterActive]}
               onPress={toggleHighlighter}
             >
               <Icon name="edit" size={24} color={isHighlighterActive ? "#fff" : "#3b82f6"} />
@@ -1451,6 +1556,7 @@ export default function PdfViewer() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -1470,6 +1576,7 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 10,
     elevation: 3,
+    height: Platform.OS === 'ios' ? 88 : 56,
   },
   headerHidden: {
     transform: [{ translateY: -100 }],
@@ -1505,7 +1612,7 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     backgroundColor: '#f0f0f0',
-    marginTop: 0,
+    marginTop: Platform.OS === 'ios' ? 88 : 56, // Add margin to push content below header
     marginBottom: 0,
     paddingTop: 0,
     paddingBottom: 0,
@@ -1524,8 +1631,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 8,
+    marginTop: 16,
     color: '#6b7280',
+    fontSize: 18,
+    fontWeight: '500',
   },
   errorContainer: {
     flex: 1,
@@ -1604,20 +1713,6 @@ const styles = StyleSheet.create({
   },
   pageText: {
     fontSize: 14,
-    color: '#4b5563',
-    fontWeight: 'bold',
-  },
-  highlighterButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-  },
-  highlighterActive: {
-    backgroundColor: '#3b82f6',
-  },
-}); 
+},
+});
+

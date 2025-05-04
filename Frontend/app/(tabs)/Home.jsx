@@ -1,9 +1,7 @@
 import {
   View,
   Text,
-  TextInput,
   FlatList,
-  Image,
   TouchableOpacity,
   Dimensions,
   StatusBar,
@@ -11,34 +9,38 @@ import {
   ActivityIndicator,
 } from "react-native";
 import React, { useState, useEffect } from "react";
-import { useRouter } from "expo-router";
-import booksData from "../../assets/booksData";
+import { useRouter, useFocusEffect } from "expo-router";
 import HeaderHome from "../components/Home/HeaderHome";
-import RenderBookItem from "../components/Home/RenderBookItem";
-import RenderReadingNowItem from "../components/Home/RenderReadingNowItem";
 import SectionHeader from "../components/SectionHeader";
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import * as FileSystem from 'expo-file-system';
 
 const screenWidth = Dimensions.get('window').width;
-
 const SPACING = 16;
 
 export default function HomeScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
-  const [searchQuery, setSearchQuery] = useState('');
   const [readingProgress, setReadingProgress] = useState({});
   const [recentlyReadPdfs, setRecentlyReadPdfs] = useState([]);
   const [completedPdfs, setCompletedPdfs] = useState([]);
+  const [allPdfs, setAllPdfs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadReadingProgressAndPdfs();
   }, []);
+
+  // Add useFocusEffect to reload data when the screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      loadReadingProgressAndPdfs();
+      return () => {
+        // cleanup if needed
+      };
+    }, [])
+  );
 
   // Load reading progress and PDFs data
   const loadReadingProgressAndPdfs = async () => {
@@ -56,7 +58,6 @@ export default function HomeScreen() {
   // Load reading progress from AsyncStorage
   const loadReadingProgress = async () => {
     try {
-      // Only use AsyncStorage (removed database sync)
       const keys = await AsyncStorage.getAllKeys();
       const progressKeys = keys.filter(key => key.startsWith('pdf_progress_'));
       
@@ -78,6 +79,24 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Error loading reading progress:', error);
     }
+  };
+
+  // Function to get reading progress percentage consistently
+  const getReadingProgressForPdf = (pdfId) => {
+    const progress = readingProgress[pdfId];
+    if (!progress) return 0;
+    
+    // First use saved percentage if available
+    if (progress.percentage) {
+      return parseInt(progress.percentage, 10);
+    }
+    
+    // Otherwise calculate from page and total
+    if (progress.page && progress.total) {
+      return Math.floor((progress.page / progress.total) * 100) || 0;
+    }
+    
+    return 0;
   };
 
   // Fetch PDFs from API and categorize them
@@ -102,50 +121,50 @@ export default function HomeScreen() {
       
       if (data.success) {
         const pdfs = data.data;
+        setAllPdfs(pdfs);
+        
+        // Get recently viewed document IDs
+        const recentlyViewedKey = 'recently_viewed_docs';
+        const recentlyViewedJson = await AsyncStorage.getItem(recentlyViewedKey);
+        const recentlyViewedIds = recentlyViewedJson ? JSON.parse(recentlyViewedJson) : [];
         
         // Process PDFs with reading progress
         const recentlyRead = [];
         const completed = [];
         const inProgress = [];
         
+        // Process all PDFs and check for reading progress
         pdfs.forEach(pdf => {
+          const percentComplete = getReadingProgressForPdf(pdf.id);
           const progress = readingProgress[pdf.id];
           
-          if (progress) {
-            // Get percentage either from saved value or calculate it
-            let percentComplete = 0;
-            
-            if (progress.percentage) {
-              percentComplete = parseInt(progress.percentage, 10);
-            } else if (progress.page && progress.total) {
-              percentComplete = Math.floor((progress.page / progress.total) * 100);
-            }
-            
-            // Create a proper Date object from the timestamp string
-            const timestamp = progress.timestamp ? new Date(progress.timestamp) : new Date();
-            
-            const pdfWithProgress = {
-              ...pdf,
-              progress: percentComplete,
-              currentPage: progress.page,
-              totalPages: progress.total,
-              timestamp: timestamp
-            };
-            
-            // Add to recently read if started (greater than 0%)
-            if (percentComplete > 0) {
-              recentlyRead.push(pdfWithProgress);
-            }
-            
-            // Add to in progress if between 1% and 99%
-            if (percentComplete > 0 && percentComplete < 100) {
-              inProgress.push(pdfWithProgress);
-            }
-            
-            // Add to completed if 100%
-            if (percentComplete >= 100) {
-              completed.push(pdfWithProgress);
-            }
+          // Create a proper Date object from the timestamp string
+          const timestamp = progress?.timestamp ? new Date(progress.timestamp) : new Date();
+          
+          const pdfWithProgress = {
+            ...pdf,
+            progress: percentComplete,
+            currentPage: progress?.page || 1,
+            totalPages: progress?.total || 1,
+            timestamp: timestamp
+          };
+          
+          // Check if this is a recently viewed document
+          const isRecentlyViewed = recentlyViewedIds.includes(pdf.id.toString());
+          
+          // Add to recently read if it has progress or is recently viewed
+          if (percentComplete > 0 || isRecentlyViewed) {
+            recentlyRead.push(pdfWithProgress);
+          }
+          
+          // Add to completed if 100%
+          if (percentComplete >= 100) {
+            completed.push(pdfWithProgress);
+          }
+          
+          // Add to in progress if between 1% and 99%
+          if (percentComplete > 0 && percentComplete < 100) {
+            inProgress.push(pdfWithProgress);
           }
         });
         
@@ -156,26 +175,22 @@ export default function HomeScreen() {
           return timeB - timeA; // Most recent first
         };
         
+        // Sort all three arrays
         recentlyRead.sort(sortByTimestamp);
-        inProgress.sort(sortByTimestamp);
         completed.sort(sortByTimestamp);
+        inProgress.sort(sortByTimestamp);
         
-        console.log(`Found ${inProgress.length} PDFs in progress, ${completed.length} completed PDFs`);
+        console.log(`Found ${recentlyRead.length} recently read PDFs, ${completed.length} completed PDFs`);
         
         setRecentlyReadPdfs(recentlyRead);
         setCompletedPdfs(completed);
-        
-        // Replace empty recentlyReadPdfs with inProgress for "Đang Đọc" section
-        if (inProgress.length > 0) {
-          setRecentlyReadPdfs(inProgress);
-        }
       }
     } catch (error) {
       console.error('Error fetching PDFs:', error);
     }
   };
 
-  // Handle viewing a PDF
+  // Handle viewing a PDF - Update to ensure reading progress is properly loaded
   const handleViewPdf = async (pdfId) => {
     try {
       // Get the reading progress for this PDF
@@ -214,289 +229,135 @@ export default function HomeScreen() {
 
   // Define all sections for the main FlatList
   const sections = [
-    { id: 'reading', type: 'reading', title: 'Đang Đọc' },
     { id: 'recentlyRead', type: 'recentlyRead', title: 'Đã Đọc Gần Đây' },
-    { id: 'completed', type: 'completed', title: 'Đã Đọc Xong' },
-    { id: 'trending', type: 'trending', title: 'Mới & Xu Hướng' },
-    { id: 'categories', type: 'categories', title: 'Danh Mục' },
-    { id: 'free', type: 'free', title: 'Sách Miễn Phí' },
-    { id: 'topcharts', type: 'topcharts', title: 'Bảng Xếp Hạng' },
+    { id: 'allDocs', type: 'allDocs', title: 'Tất Cả Tài Liệu' },
   ];
 
   // Render different section types for the main FlatList
   const renderSection = ({ item }) => {
     switch (item.type) {
-      case 'reading':
+      case 'recentlyRead':
         return (
           <View>
             <SectionHeader title={item.title} />
-            <View className="flex-row flex-wrap justify-between mt-4 px-4">
-              {recentlyReadPdfs.length > 0 ? (
-                recentlyReadPdfs.slice(0, 4).map(pdf => (
-                  <View key={pdf.id} className="w-[46%]">
-                    <TouchableOpacity
-                      className="mb-6"
-                      style={{ width: (screenWidth - SPACING * 3) / 2 }}
-                      onPress={() => handleViewPdf(pdf.id)}
+            {recentlyReadPdfs.length > 0 ? (
+              <FlatList
+                data={recentlyReadPdfs}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    className="mr-4"
+                    style={{ width: 130 }}
+                    onPress={() => handleViewPdf(item.id)}
+                  >
+                    <View
+                      className="rounded-lg mb-2 shadow-md bg-blue-100 justify-center items-center"
+                      style={{ width: 130, height: 180 }}
                     >
-                      <View
-                        className="rounded-lg mb-2 shadow-md bg-blue-100 justify-center items-center"
-                        style={{ width: (screenWidth - SPACING * 3) / 2, height: ((screenWidth - SPACING * 3) / 2) * 1.5 }}
-                      >
-                        <Icon name="picture-as-pdf" size={48} color="#0064e1" />
+                      <Icon name="picture-as-pdf" size={40} color="#0064e1" />
+                    </View>
+                    
+                    <Text
+                      className="font-semibold text-sm mb-0.5"
+                      numberOfLines={2}
+                    >
+                      {item.title}
+                    </Text>
+                    
+                    <View className="flex-row items-center mt-1">
+                      <View className="h-1 bg-gray-200 rounded-full flex-1 mr-2">
+                        <View
+                          className="h-1 bg-blue-500 rounded-full"
+                          style={{ width: `${item.progress}%` }}
+                        />
                       </View>
-                     
-                      <View className="px-1">
-                        <Text
-                          className="font-semibold text-sm mb-1"
-                          numberOfLines={2}
-                        >
-                          {pdf.title}
-                        </Text>
-                       
-                        <View className="flex-row items-center mt-1 mb-1">
-                          <View className="h-1 bg-gray-200 rounded-full w-full overflow-hidden">
-                            <View
-                              className="h-1 bg-blue-500 rounded-full"
-                              style={{ width: `${pdf.progress || 0}%` }}
-                            />
-                          </View>
-                          <Text className="text-gray-400 text-xs mt-1 ml-1">
-                            {pdf.progress}%
-                          </Text>
+                      <Text className="text-gray-400 text-xs">
+                        {item.progress}%
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                keyExtractor={item => `recent-${item.id}`}
+                contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING }}
+              />
+            ) : (
+              <View className="px-4 py-6 items-center">
+                <Text className="text-gray-500">Bạn chưa đọc tài liệu nào gần đây</Text>
+              </View>
+            )}
+          </View>
+        );
+
+      case 'allDocs':
+        return (
+          <View>
+            <SectionHeader title={item.title} />
+            <View className="px-4">
+              {allPdfs.length > 0 ? (
+                allPdfs.map((pdf, index) => (
+                  <TouchableOpacity 
+                    key={`all-${pdf.id}`}
+                    className="flex-row items-center bg-white p-3 mb-3 rounded-xl shadow-sm"
+                    onPress={() => handleViewPdf(pdf.id)}
+                  >
+                    <View className="bg-blue-100 h-14 w-14 rounded-lg justify-center items-center mr-3">
+                      <Icon name="picture-as-pdf" size={28} color="#0064e1" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-semibold" numberOfLines={1}>{pdf.title}</Text>
+                      <Text className="text-gray-500 text-xs mt-1">
+                        {pdf.upload_date ? new Date(pdf.upload_date).toLocaleDateString("vi-VN") : "Không rõ ngày tải lên"}
+                      </Text>
+                      
+                      <View className="flex-row items-center mt-2">
+                        <View className="h-1 bg-gray-200 rounded-full flex-1 mr-2">
+                          <View
+                            className="h-1 bg-blue-500 rounded-full"
+                            style={{ width: `${getReadingProgressForPdf(pdf.id)}%` }}
+                          />
                         </View>
+                        <Text className="text-gray-400 text-xs">
+                          {getReadingProgressForPdf(pdf.id)}%
+                        </Text>
                       </View>
-                    </TouchableOpacity>
-                  </View>
+                    </View>
+                    <Icon name="chevron-right" size={24} color="#9ca3af" />
+                  </TouchableOpacity>
                 ))
               ) : (
-                booksData.featuredBooks.slice(0, 4).map(book => (
-                  <View key={book.id} className="w-[46%]">
-                    {RenderReadingNowItem({ item: book })}
-                  </View>
-                ))
+                <View className="py-6 items-center">
+                  <Text className="text-gray-500">Không có tài liệu nào</Text>
+                </View>
               )}
             </View>
-          </View>
-        );
-
-      case 'recentlyRead':
-        if (recentlyReadPdfs.length === 0) return null;
-        return (
-          <View>
-            <SectionHeader title={item.title} />
-            <FlatList
-              data={recentlyReadPdfs}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  className="mr-4"
-                  style={{ width: 120 }}
-                  onPress={() => handleViewPdf(item.id)}
-                >
-                  <View
-                    className="rounded-lg mb-2 shadow-md bg-blue-100 justify-center items-center"
-                    style={{ width: 120, height: 180 }}
-                  >
-                    <Icon name="picture-as-pdf" size={40} color="#0064e1" />
-                  </View>
-                  
-                  <Text
-                    className="font-semibold text-sm mb-0.5"
-                    numberOfLines={2}
-                  >
-                    {item.title}
-                  </Text>
-                  
-                  <View className="flex-row items-center mt-1">
-                    <View className="h-1 bg-gray-200 rounded-full flex-1 mr-2">
-                      <View
-                        className="h-1 bg-blue-500 rounded-full"
-                        style={{ width: `${item.progress}%` }}
-                      />
-                    </View>
-                    <Text className="text-gray-400 text-xs">
-                      {item.progress}%
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-              keyExtractor={item => `recent-${item.id}`}
-              contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING }}
-            />
-          </View>
-        );
-
-      case 'completed':
-        if (completedPdfs.length === 0) return null;
-        return (
-          <View>
-            <SectionHeader title={item.title} />
-            <FlatList
-              data={completedPdfs}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  className="mr-4"
-                  style={{ width: 120 }}
-                  onPress={() => handleViewPdf(item.id)}
-                >
-                  <View
-                    className="rounded-lg mb-2 shadow-md bg-green-100 justify-center items-center relative"
-                    style={{ width: 120, height: 180 }}
-                  >
-                    <Icon name="picture-as-pdf" size={40} color="#16a34a" />
-                    <View className="absolute top-2 right-2 bg-green-500 rounded-full p-1">
-                      <Icon name="check" size={16} color="#fff" />
-                    </View>
-                  </View>
-                  
-                  <Text
-                    className="font-semibold text-sm mb-0.5"
-                    numberOfLines={2}
-                  >
-                    {item.title}
-                  </Text>
-                  
-                  <Text className="text-green-600 text-xs font-medium">
-                    Đã hoàn thành
-                  </Text>
-                </TouchableOpacity>
-              )}
-              keyExtractor={item => `completed-${item.id}`}
-              contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING }}
-            />
           </View>
         );
       
-      case 'trending':
-        return (
-          <View>
-            <SectionHeader title={item.title} />
-            <FlatList
-              data={booksData.bestSellers}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              renderItem={RenderBookItem}
-              keyExtractor={book => book.id}
-              contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING * 2 }}
-            />
-          </View>
-        );
-     
-      case 'categories':
-        return (
-          <View className="mb-2">
-            <SectionHeader title={item.title} />
-            <View className="flex-row flex-wrap justify-between px-4">
-              {['Tiểu Thuyết', 'Giáo Dục', 'Kinh Doanh', 'Tâm Lý Học', 'Khoa Học', 'Lịch Sử'].map((category, index) => (
-                <TouchableOpacity
-                  key={index}
-                  className="bg-white rounded-xl p-4 mb-4 shadow w-[46%]"
-                >
-                  <Text className="text-base font-semibold">{category}</Text>
-                  <Text className="text-gray-400 text-xs mt-1">
-                    {Math.floor(Math.random() * 100) + 50} sách
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        );
-     
-      case 'free':
-        return (
-          <View>
-            <SectionHeader title={item.title} />
-            <FlatList
-              data={booksData.freeBooks}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              renderItem={RenderBookItem}
-              keyExtractor={book => book.id}
-              contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING * 2 }}
-            />
-          </View>
-        );
-     
-      case 'topcharts':
-        return (
-          <View>
-            <SectionHeader title={item.title} />
-            <FlatList
-              data={[...booksData.bestSellers].sort(() => Math.random() - 0.5)}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              renderItem={({ item, index }) => (
-                <View className="w-[120px] mr-4 relative">
-                  {/* Ranking Badge */}
-                  <View className="absolute top-0 left-0 z-10 bg-blue-500 w-[30px] h-[30px] rounded-full justify-center items-center shadow-md">
-                    <Text className="text-white font-bold">
-                      {index + 1}
-                    </Text>
-                  </View>
-
-                  {/* Book Item */}
-                  <TouchableOpacity
-                    className="mt-[15px]"
-                    onPress={() => {
-                      if (item.file_path) {
-                        navigation.navigate('PdfViewer', {
-                          pdfPath: item.file_path,
-                          pdfTitle: item.name_book
-                        });
-                      } else {
-                        router.push(`/Books/${item.book_id}`);
-                      }
-                    }}
-                  >
-                    {item.image ? (
-                      <Image
-                        source={item.image}
-                        className="w-[120px] h-[180px] rounded-lg mb-2 shadow-sm"
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View className="w-[120px] h-[180px] rounded-lg mb-2 shadow-sm bg-gray-300 justify-center items-center">
-                        <Text className="text-gray-500">No Image</Text>
-                      </View>
-                    )}
-                    <Text
-                      className="font-semibold text-sm mb-0.5"
-                      numberOfLines={3}
-                    >
-                      {item.name_book}
-                    </Text>
-                    <Text className="text-gray-500 text-xs">{item.author}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              keyExtractor={(item, index) => `top-${item.book_id || item.id || index}`}
-              contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING * 2, paddingTop: 10 }}
-            />
-          </View>
-        );
-     
       default:
         return null;
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50 justify-center items-center">
+        <ActivityIndicator size="large" color="#0064e1" />
+        <Text className="mt-4 text-gray-600">Đang tải dữ liệu...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-    <FlatList
-    data={sections}
-    keyExtractor={item => item.id}
-    renderItem={renderSection}
-    showsVerticalScrollIndicator={false}
-    ListHeaderComponent={
-          <View className="flex-1">
-            <HeaderHome />
-          </View>
-        }
-    contentContainerStyle={{ paddingBottom: SPACING * 7 }}
-  />
+      <FlatList
+        data={sections}
+        keyExtractor={item => item.id}
+        renderItem={renderSection}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={<HeaderHome />}
+        contentContainerStyle={{ paddingBottom: 120 }}
+      />
     </SafeAreaView>
   );
 }
