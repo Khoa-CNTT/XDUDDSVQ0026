@@ -27,6 +27,19 @@ Route::post('/quen-mat-khau', [UsersController::class, 'quenMatKhau']);
 // Public route with token parameter for iframe PDF viewing
 Route::get('/pdfs/{pdf}/download-with-token', [PDFController::class, 'downloadWithToken']);
 
+// Public Book routes
+Route::get('/books', [BookController::class, 'danhSach']);
+Route::get('/books/free', [BookController::class, 'sachMienPhi']);
+Route::get('/books/paid', [BookController::class, 'sachCoPhi']);
+Route::get('/books/search', [BookController::class, 'timKiem']);
+Route::get('/books/category/{categoryId}', [BookController::class, 'theoTheLoai']);
+Route::get('/books/author/{authorId}', [BookController::class, 'theoTacGia']);
+Route::get('/books/{id}', [BookController::class, 'chiTiet']);
+
+// Public Category routes
+Route::get('/categories', [CategoryController::class, 'danhSach']);
+Route::get('/categories/{id}', [CategoryController::class, 'chiTiet']);
+
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // User routes
@@ -37,14 +50,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/devices', [UsersController::class, 'logoutAllDevices']);
     Route::delete('/all-devices', [UsersController::class, 'logoutAllDevicesIncludingCurrent']);
 
-    // Book routes
-    Route::get('/books', [BookController::class, 'danhSach']);
-    Route::get('/books/free', [BookController::class, 'sachMienPhi']);
-    Route::get('/books/paid', [BookController::class, 'sachCoPhi']);
-    Route::get('/books/search', [BookController::class, 'timKiem']);
-    Route::get('/books/category/{categoryId}', [BookController::class, 'theoTheLoai']);
-    Route::get('/books/author/{authorId}', [BookController::class, 'theoTacGia']);
-    Route::get('/books/{id}', [BookController::class, 'chiTiet']);
+    // Protected Book routes
     Route::post('/books', [BookController::class, 'themMoi']);
     Route::put('/books/{id}', [BookController::class, 'capNhat']);
     Route::delete('/books/{id}', [BookController::class, 'xoa']);
@@ -59,9 +65,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/authors/{id}', [AuthorController::class, 'capNhat']);
     Route::delete('/authors/{id}', [AuthorController::class, 'xoa']);
     
-    // Category routes
-    Route::get('/categories', [CategoryController::class, 'danhSach']);
-    Route::get('/categories/{id}', [CategoryController::class, 'chiTiet']);
+    // Protected Category routes
     Route::post('/categories', [CategoryController::class, 'themMoi']);
     Route::put('/categories/{id}', [CategoryController::class, 'capNhat']);
     Route::delete('/categories/{id}', [CategoryController::class, 'xoa']);
