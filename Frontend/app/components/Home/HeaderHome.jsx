@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Image } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,7 +29,6 @@ const HeaderHome = () => {
     <View className="pt-2 pb-4 px-4">
       <View className="flex-row justify-between items-center mb-2">
         <View>
-          
           <Text className="text-4xl font-bold">Home</Text>
         </View>
         <TouchableOpacity 
@@ -43,7 +42,7 @@ const HeaderHome = () => {
       <View className="flex-row mt-4">
         <TouchableOpacity 
           className="bg-blue-50 flex-1 mr-2 rounded-xl p-4 border border-blue-100"
-          onPress={() => router.push('/screen/Library')}
+          onPress={() => router.push('/(tabs)/Library')}
         >
           <Icon name="menu-book" size={24} color="#0064e1" />
           <Text className="font-semibold mt-2">Thư viện</Text>
@@ -52,7 +51,7 @@ const HeaderHome = () => {
         
         <TouchableOpacity 
           className="bg-purple-50 flex-1 ml-2 rounded-xl p-4 border border-purple-100"
-          onPress={() => router.push('/screen/Explore')}
+          onPress={() => router.push('/(tabs)/BookStore')}
         >
           <Icon name="explore" size={24} color="#8b5cf6" />
           <Text className="font-semibold mt-2">Khám phá</Text>

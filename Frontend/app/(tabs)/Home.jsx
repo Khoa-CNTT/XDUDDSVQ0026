@@ -8,7 +8,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
 } from "react-native";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useFocusEffect } from "expo-router";
 import HeaderHome from "../components/Home/HeaderHome";
 import SectionHeader from "../components/SectionHeader";
@@ -27,59 +27,214 @@ export default function HomeScreen() {
   const [completedPdfs, setCompletedPdfs] = useState([]);
   const [allPdfs, setAllPdfs] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Refs for managing lifecycle and fetch requests
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef(null);
+  const checkIntervalRef = useRef(null);
+  const isLoadingRef = useRef(false);
+  const lastCheckedUpdate = useRef('');
 
+  // useEffect to initialize component
   useEffect(() => {
-    loadReadingProgressAndPdfs();
+    isMountedRef.current = true;
+    
+    // Tải dữ liệu ban đầu
+    if (!isLoadingRef.current) {
+      loadReadingProgressAndPdfs();
+    }
+    
+    // Cleanup when component unmounts
+    return () => {
+      console.log('📚 Home component unmounted');
+      isMountedRef.current = false;
+      
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+        checkIntervalRef.current = null;
+      }
+      
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, []);
+
+  // Kiểm tra xem có nên tải lại dữ liệu không
+  const shouldRefreshData = async () => {
+    try {
+      // Thời điểm lần cuối tải dữ liệu
+      const lastFetchedStr = await AsyncStorage.getItem('home_data_last_fetched');
+      const lastFetched = lastFetchedStr ? parseInt(lastFetchedStr) : 0;
+      
+      // Thời gian hiện tại
+      const now = Date.now();
+      
+      // Khoảng thời gian tối thiểu giữa các lần refresh (2 phút = 120000ms)
+      const minRefreshInterval = 120000;
+      
+      // Nếu chưa từng tải dữ liệu hoặc đã quá lâu
+      if (!lastFetched || (now - lastFetched) > minRefreshInterval) {
+        return true;
+      }
+      
+      // Tránh việc tải lại dữ liệu nếu đã có dữ liệu
+      if (allPdfs.length === 0) {
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('📚 Error checking refresh status:', error);
+      // Nếu có lỗi, mặc định là tải lại dữ liệu
+      return true;
+    }
+  };
 
   // Add useFocusEffect to reload data when the screen is focused
   useFocusEffect(
     React.useCallback(() => {
-      loadReadingProgressAndPdfs();
+      console.log('📚 Home screen focused');
+      isMountedRef.current = true;
       
-      // Set up listener for reading progress updates
-      const checkForProgressUpdates = async () => {
+      // Tạo AbortController mới để quản lý fetch requests
+      const controller = new AbortController();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = controller;
+      
+      // Tải lại dữ liệu khi tab được focus, nhưng chỉ khi cần thiết
+      const refreshDataOnFocus = async () => {
         try {
-          const lastUpdate = await AsyncStorage.getItem('reading_progress_updated');
-          if (lastUpdate && lastUpdate !== lastCheckedUpdate.current) {
-            console.log('Reading progress was updated, refreshing data...');
-            lastCheckedUpdate.current = lastUpdate;
-            loadReadingProgressAndPdfs();
+          // Kiểm tra xem có cần tải lại dữ liệu không
+          const needRefresh = await shouldRefreshData();
+          
+          if (needRefresh) {
+            console.log('📚 Home data refresh needed, fetching latest data...');
+            // Đặt cờ để tránh nhiều fetchs cùng lúc
+            isLoadingRef.current = true;
+            
+            if (!loading) setLoading(true);
+            
+            // Tải lại dữ liệu
+            await loadReadingProgress();
+            await fetchPDFs(controller.signal);
+            
+            if (isMountedRef.current) {
+              // Cập nhật timestamp
+              await AsyncStorage.setItem('home_data_last_fetched', Date.now().toString());
+              setLoading(false);
+            }
+          } else {
+            console.log('📚 Using cached home data, no need to refresh');
+            // Vẫn tải lại reading progress vì nó thay đổi thường xuyên
+            if (!isLoadingRef.current) {
+              await loadReadingProgress();
+            }
           }
         } catch (error) {
-          console.error('Error checking for reading progress updates:', error);
+          if (error.name === 'AbortError') {
+            console.log('📚 Home data refresh was aborted');
+            return;
+          }
+          
+          console.error('📚 Error refreshing home data:', error);
+        } finally {
+          if (isMountedRef.current) {
+            isLoadingRef.current = false;
+          }
         }
       };
       
-      // Check immediately and set up interval
-      checkForProgressUpdates();
-      const updateInterval = setInterval(checkForProgressUpdates, 3000); // Check every 3 seconds
+      refreshDataOnFocus();
+      
+      // Set up listener for reading progress updates
+      const setupProgressListener = () => {
+        // Đảm bảo chỉ có một interval đang chạy
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+        }
+        
+        // Check for updates every 5 seconds
+        checkIntervalRef.current = setInterval(async () => {
+          if (!isMountedRef.current) return;
+          
+          try {
+            const lastUpdate = await AsyncStorage.getItem('reading_progress_updated');
+            if (lastUpdate && lastUpdate !== lastCheckedUpdate.current) {
+              console.log('📚 Reading progress was updated, refreshing data...');
+              lastCheckedUpdate.current = lastUpdate;
+              // Chỉ tải lại reading progress, không phải toàn bộ dữ liệu
+              await loadReadingProgress();
+            }
+          } catch (error) {
+            if (isMountedRef.current) {
+              console.error('📚 Error checking for reading progress updates:', error);
+            }
+          }
+        }, 5000); // Check every 5 seconds
+      };
+      
+      setupProgressListener();
       
       return () => {
-        clearInterval(updateInterval);
+        console.log('📚 Home screen unfocused - cleaning up');
+        
+        if (checkIntervalRef.current) {
+          clearInterval(checkIntervalRef.current);
+          checkIntervalRef.current = null;
+        }
+        
+        // Abort ongoing fetch requests
+        controller.abort();
       };
     }, [])
   );
-  
-  // Reference to track last checked update time
-  const lastCheckedUpdate = React.useRef('');
 
   // Load reading progress and PDFs data
   const loadReadingProgressAndPdfs = async () => {
+    if (isLoadingRef.current || !isMountedRef.current) return;
+    
     try {
-      setLoading(true);
+      isLoadingRef.current = true;
+      if (!loading) setLoading(true);
+      
+      // Tạo AbortController mới để quản lý fetch requests
+      const controller = new AbortController();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = controller;
+      
       await loadReadingProgress();
-      await fetchPDFs();
+      await fetchPDFs(controller.signal);
+      
+      if (isMountedRef.current) {
+        // Cập nhật timestamp
+        await AsyncStorage.setItem('home_data_last_fetched', Date.now().toString());
+      }
     } catch (error) {
-      console.error('Error loading data:', error);
+      if (error.name === 'AbortError') {
+        console.log('📚 Data loading was aborted');
+        return;
+      }
+      
+      console.error('📚 Error loading data:', error);
     } finally {
-      setLoading(false);
+      isLoadingRef.current = false;
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   // Load reading progress from AsyncStorage
   const loadReadingProgress = async () => {
+    if (!isMountedRef.current) return;
+    
     try {
+      console.log('📚 Loading reading progress...');
       const keys = await AsyncStorage.getAllKeys();
       const progressKeys = keys.filter(key => key.startsWith('pdf_progress_'));
       
@@ -94,16 +249,18 @@ export default function HomeScreen() {
               const progress = JSON.parse(value);
               progressData[pdfId] = progress;
             } catch (parseError) {
-              console.error('Error parsing progress data:', parseError);
+              console.error('📚 Error parsing progress data:', parseError);
             }
           }
         });
         
-        setReadingProgress(progressData);
-        console.log('Loaded reading progress from local storage for', Object.keys(progressData).length, 'PDFs');
+        if (isMountedRef.current) {
+          setReadingProgress(progressData);
+          console.log('📚 Loaded reading progress from local storage for', Object.keys(progressData).length, 'PDFs');
+        }
       }
     } catch (error) {
-      console.error('Error loading reading progress:', error);
+      console.error('📚 Error loading reading progress:', error);
     }
   };
 
@@ -126,27 +283,34 @@ export default function HomeScreen() {
   };
 
   // Fetch PDFs from API and categorize them
-  const fetchPDFs = async () => {
+  const fetchPDFs = async (signal) => {
+    if (!isMountedRef.current) return;
+    
     try {
       const token = await AsyncStorage.getItem('token');
       
       if (!token) {
-        console.log('No token found');
+        console.log('📚 No token found');
         return;
       }
       
+      console.log('📚 Fetching PDFs from API...');
       const response = await fetch(`${API_URL}/pdfs`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal // Pass the AbortController signal
       });
+      
+      if (!isMountedRef.current) return;
       
       const data = await response.json();
       
       if (data.success) {
         const pdfs = data.data;
+        console.log(`📚 Fetched ${pdfs.length} PDFs from API`);
         
         // Get recently viewed document IDs
         const recentlyViewedKey = 'recently_viewed_docs';
@@ -210,14 +374,21 @@ export default function HomeScreen() {
         completed.sort(sortByTimestamp);
         inProgress.sort(sortByTimestamp);
         
-        console.log(`Found ${recentlyRead.length} recently read PDFs, ${completed.length} completed PDFs`);
-        
-        setRecentlyReadPdfs(recentlyRead);
-        setCompletedPdfs(completed);
-        setAllPdfs(processedPdfs);
+        if (isMountedRef.current) {
+          console.log(`📚 Found ${recentlyRead.length} recently read PDFs, ${completed.length} completed PDFs`);
+          
+          setRecentlyReadPdfs(recentlyRead);
+          setCompletedPdfs(completed);
+          setAllPdfs(processedPdfs);
+        }
       }
     } catch (error) {
-      console.error('Error fetching PDFs:', error);
+      if (error.name === 'AbortError') {
+        console.log('📚 PDF fetch was aborted');
+        return;
+      }
+      
+      console.error('📚 Error fetching PDFs:', error);
     }
   };
 
@@ -230,7 +401,7 @@ export default function HomeScreen() {
       
       if (progress && progress.page) {
         currentPage = parseInt(progress.page, 10);
-        console.log(`Opening PDF at saved page ${currentPage}`);
+        console.log(`📚 Opening PDF at saved page ${currentPage}`);
       }
       
       // Check if the PDF exists locally
@@ -238,6 +409,28 @@ export default function HomeScreen() {
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
       
       const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      
+      // Add to recently viewed before navigating
+      const recentlyViewedKey = 'recently_viewed_docs';
+      try {
+        const recentlyViewedJson = await AsyncStorage.getItem(recentlyViewedKey);
+        let recentlyViewedIds = recentlyViewedJson ? JSON.parse(recentlyViewedJson) : [];
+        
+        // Remove if already in list (to add at the beginning)
+        recentlyViewedIds = recentlyViewedIds.filter(id => id !== pdfId.toString());
+        
+        // Add at beginning of array
+        recentlyViewedIds.unshift(pdfId.toString());
+        
+        // Keep only the most recent 10
+        if (recentlyViewedIds.length > 10) {
+          recentlyViewedIds = recentlyViewedIds.slice(0, 10);
+        }
+        
+        await AsyncStorage.setItem(recentlyViewedKey, JSON.stringify(recentlyViewedIds));
+      } catch (err) {
+        console.error('📚 Error updating recently viewed:', err);
+      }
       
       router.push({
         pathname: '/PdfViewer',
@@ -248,7 +441,7 @@ export default function HomeScreen() {
         }
       });
     } catch (error) {
-      console.error('Error preparing PDF view:', error);
+      console.error('📚 Error preparing PDF view:', error);
       
       // Fall back to basic navigation if there's an error
       router.push({
@@ -270,10 +463,12 @@ export default function HomeScreen() {
       case 'recentlyRead':
         return (
           <View>
-            <SectionHeader title={item.title} />
+            <View className="flex-row justify-between items-center mb-4 mt-6 px-4">
+              <Text className="text-[22px] font-bold">{item.title}</Text>
+            </View>
             {recentlyReadPdfs.length > 0 ? (
               <FlatList
-                data={recentlyReadPdfs}
+                data={recentlyReadPdfs.slice(0, 3)}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 renderItem={({ item }) => (
@@ -323,10 +518,10 @@ export default function HomeScreen() {
       case 'allDocs':
         return (
           <View>
-            <SectionHeader title={item.title} />
+            <SectionHeader title={item.title} type="all" />
             <View className="px-4">
               {allPdfs.length > 0 ? (
-                allPdfs.map((pdf, index) => (
+                allPdfs.slice(0, 3).map((pdf, index) => (
                   <TouchableOpacity 
                     key={`all-${pdf.id}`}
                     className="flex-row items-center bg-white p-3 mb-3 rounded-xl shadow-sm"

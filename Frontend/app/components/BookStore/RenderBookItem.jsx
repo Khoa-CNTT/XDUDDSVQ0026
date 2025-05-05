@@ -1,46 +1,68 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, Image, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 
-const RenderBookItem = ({ item }) => {
+const RenderBookItem = React.memo(({ item, onPress }) => {
   const [readingProgress, setReadingProgress] = useState(0);
+  const isMountedRef = useRef(true);
+  const intervalRef = useRef(null);
+  const lastCheckedRef = useRef(null);
+
+  // Tách hàm getReadingProgress ra để tái sử dụng
+  const getReadingProgress = useCallback(async () => {
+    try {
+      if (!isMountedRef.current) return;
+      
+      const key = `pdf_progress_${item.id || item.book_id}`;
+      const progress = await AsyncStorage.getItem(key);
+      
+      if (progress && isMountedRef.current) {
+        const progressData = JSON.parse(progress);
+        if (progressData.percentage) {
+          setReadingProgress(progressData.percentage);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading reading progress:', error);
+    }
+  }, [item.id, item.book_id]);
 
   useEffect(() => {
-    // Lấy tiến trình đọc sách nếu có
-    const getReadingProgress = async () => {
-      try {
-        const key = `pdf_progress_${item.id || item.book_id}`;
-        const progress = await AsyncStorage.getItem(key);
-        
-        if (progress) {
-          const progressData = JSON.parse(progress);
-          if (progressData.percentage) {
-            setReadingProgress(progressData.percentage);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading reading progress:', error);
-      }
-    };
-
+    // console.log(`📱 RenderBookItem mounted for book: ${item.id || item.book_id}`);
+    isMountedRef.current = true;
+    
+    // Load initial progress
     getReadingProgress();
     
-    // Thiết lập interval để kiểm tra cập nhật
-    const interval = setInterval(async () => {
+    // Thiết lập interval với tham chiếu để có thể dọn dẹp
+    intervalRef.current = setInterval(async () => {
+      if (!isMountedRef.current) return;
+      
       try {
         const lastUpdate = await AsyncStorage.getItem('reading_progress_updated');
-        if (lastUpdate) {
-          getReadingProgress();
+        if (lastUpdate && lastUpdate !== lastCheckedRef.current) {
+          // console.log(`📱 Progress updated for book: ${item.id || item.book_id}`);
+          lastCheckedRef.current = lastUpdate;
+          await getReadingProgress();
         }
       } catch (error) {
-        console.error('Error checking for progress updates:', error);
+        if (isMountedRef.current) {
+          console.error('Error checking for progress updates:', error);
+        }
       }
-    }, 5000);
+    }, 30000); // Tăng interval lên 30 giây để giảm số lần check
     
-    return () => clearInterval(interval);
-  }, [item.id, item.book_id]);
+    return () => {
+      // console.log(`📱 RenderBookItem unmounting for book: ${item.id || item.book_id}`);
+      isMountedRef.current = false;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [getReadingProgress, item.id, item.book_id]);
 
   // Xử lý xóa tiến trình đọc sách
   const handleDeleteProgress = async () => {
@@ -134,19 +156,23 @@ const RenderBookItem = ({ item }) => {
   };
 
   const handlePress = () => {
-    if (item.file_path) {
-      // Chuyển đến PDF viewer
-      router.push({
-        pathname: '/PdfViewer',
-        params: { 
-          pdfPath: item.file_path, 
-          pdfTitle: item.title || item.name_book,
-          pdfId: item.id || item.book_id
-        }
-      });
+    if (onPress) {
+      onPress(item);
     } else {
-      // Chuyển đến trang chi tiết sách
-      router.push(`/Books/${item.id || item.book_id}`);
+      if (item.file_path) {
+        // Chuyển đến PDF viewer
+        router.push({
+          pathname: '/PdfViewer',
+          params: { 
+            pdfPath: item.file_path, 
+            pdfTitle: item.title || item.name_book,
+            pdfId: item.id || item.book_id
+          }
+        });
+      } else {
+        // Chuyển đến trang chi tiết sách
+        router.push(`/Books/${item.id || item.book_id}`);
+      }
     }
   };
 
@@ -216,6 +242,16 @@ const RenderBookItem = ({ item }) => {
       </View>
     </TouchableOpacity>
   );
-};
+}, (prevProps, nextProps) => {
+  // Shallow compare item properties that matter for rendering
+  return (
+    prevProps.item.id === nextProps.item.id &&
+    prevProps.item.title === nextProps.item.title &&
+    prevProps.item.name_book === nextProps.item.name_book &&
+    prevProps.item.image === nextProps.item.image &&
+    prevProps.item.price === nextProps.item.price &&
+    prevProps.item.rating === nextProps.item.rating
+  );
+});
 
 export default RenderBookItem;

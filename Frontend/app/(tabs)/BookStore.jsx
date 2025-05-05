@@ -247,31 +247,64 @@ export default function BookStore() {
 
   // Effect to load data on component mount
   useEffect(() => {
-    loadData();
+    const abortController = new AbortController();
+    console.log('📚 BookStore mounted, loading data...');
+    
+    const loadDataOnMount = async () => {
+      try {
+        await loadData(abortController.signal);
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          console.error('Error loading data:', error);
+        }
+      }
+    };
+
+    loadDataOnMount();
+
+    return () => {
+      console.log('📚 BookStore unmounting, aborting requests...');
+      abortController.abort();
+    };
   }, []);
 
   // Effect to focus on category when changed
   useFocusEffect(
     React.useCallback(() => {
-      if (categories.length > 0 && !activeCategory) {
-        setActiveCategory(categories[0]?.category_id);
-      }
+      console.log('📚 BookStore tab focused');
+      let isFocused = true;
+      
+      const checkAndSetCategory = () => {
+        if (isFocused && categories.length > 0 && !activeCategory) {
+          console.log('📚 Setting active category:', categories[0]?.name_category);
+          setActiveCategory(categories[0]?.category_id);
+        }
+      };
+      
+      checkAndSetCategory();
+      
+      return () => {
+        console.log('📚 BookStore tab unfocused');
+        isFocused = false;
+      };
     }, [categories, activeCategory])
   );
 
-  // Load data from API
-  const loadData = async () => {
+  // Load data from API with signal
+  const loadData = async (signal) => {
     setIsLoading(true);
     setError(null);
     
     try {
       await Promise.all([
-        fetchBooks(),
-        fetchCategories()
+        fetchBooks(signal),
+        fetchCategories(signal)
       ]);
     } catch (error) {
-      console.error('Error loading data:', error);
-      setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+      if (error.name !== 'AbortError') {
+        console.error('Error loading data:', error);
+        setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -280,18 +313,28 @@ export default function BookStore() {
   // Refresh data
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadData();
-    setIsRefreshing(false);
+    const refreshController = new AbortController();
+    try {
+      await loadData(refreshController.signal);
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Error refreshing data:', error);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
-  // Fetch books from API
-  const fetchBooks = async () => {
+  // Fetch books from API with proper signal handling
+  const fetchBooks = async (signal) => {
     try {
-      const response = await fetch(`${API_URL}/books`);
-      const data = await response.json();
+      console.log('📚 Fetching books...');
+      const booksResponse = await fetch(`${API_URL}/books`, { signal });
+      const booksData = await booksResponse.json();
       
-      if (data.status && data.data) {
-        const booksData = data.data.map(book => ({
+      if (booksData.status && booksData.data) {
+        console.log(`📚 Received ${booksData.data.length} books`);
+        const processedBooks = booksData.data.map(book => ({
           id: book.book_id,
           title: book.name_book,
           author: book.author ? book.author.name_author : 'Không rõ tác giả',
@@ -303,41 +346,51 @@ export default function BookStore() {
           description: book.description || "Mô tả sách sẽ hiển thị ở đây",
         }));
         
-        setBooks(booksData);
+        setBooks(processedBooks);
         
         // Create featured and recommended books
-        const randomizedBooks = [...booksData].sort(() => 0.5 - Math.random());
+        const randomizedBooks = [...processedBooks].sort(() => 0.5 - Math.random());
         setFeatured(randomizedBooks.slice(0, 8));
         setRecommended(randomizedBooks.slice(8, 16));
         
         // Organize books by category
-        organizeBooksIntoCategories(booksData);
+        organizeBooksIntoCategories(processedBooks);
       } else {
         throw new Error('Dữ liệu không hợp lệ');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('📚 Books fetch aborted');
+        throw error;
+      }
       console.error('Error fetching books:', error);
       // Use default data if API fails
       useDefaultData();
     }
   };
 
-  // Fetch categories from API
-  const fetchCategories = async () => {
+  // Fetch categories from API with proper signal handling
+  const fetchCategories = async (signal) => {
     try {
-      const response = await fetch(`${API_URL}/categories`);
-      const data = await response.json();
+      console.log('📚 Fetching categories...');
+      const categoriesResponse = await fetch(`${API_URL}/categories`, { signal });
+      const categoriesData = await categoriesResponse.json();
       
-      if (data.status && data.data) {
-        setCategories(data.data);
+      if (categoriesData.status && categoriesData.data) {
+        console.log(`📚 Received ${categoriesData.data.length} categories`);
+        setCategories(categoriesData.data);
         
-        if (data.data.length > 0 && !activeCategory) {
-          setActiveCategory(data.data[0].category_id);
+        if (categoriesData.data.length > 0 && !activeCategory) {
+          setActiveCategory(categoriesData.data[0].category_id);
         }
       } else {
         throw new Error('Dữ liệu danh mục không hợp lệ');
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('📚 Categories fetch aborted');
+        throw error;
+      }
       console.error('Error fetching categories:', error);
       // Use default categories
       const defaultCategories = [

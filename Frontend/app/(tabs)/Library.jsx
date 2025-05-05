@@ -789,27 +789,40 @@ export default function Library() {
         </View>
         
         {/* Bộ lọc và sắp xếp */}
-        <View className="flex-row justify-between mb-4">
+        <View className="flex-row justify-between items-center mb-4">
           {/* Lọc theo định dạng */}
-          <TouchableOpacity 
-            className="flex-row items-center bg-white px-3 py-2 rounded-full border border-gray-200"
-            onPress={() => setShowFormatFilter(!showFormatFilter)}
-          >
-            <Ionicons name="funnel-outline" size={16} color="#666" />
-            <Text className="ml-1 text-sm">
-              {selectedFormat ? FILE_FORMATS.find(f => f.id === selectedFormat)?.name : 'Tất cả'}
-            </Text>
-          </TouchableOpacity>
-          
-          {/* Sắp xếp */}
-          <TouchableOpacity 
-            className="flex-row items-center bg-white px-3 py-2 rounded-full border border-gray-200"
-            onPress={() => setShowSortOptions(!showSortOptions)}
-          >
-            <Ionicons name="swap-vertical-outline" size={16} color="#666" />
-            <Text className="ml-1 text-sm">{sortInfo.name}</Text>
-            <Ionicons name={sortInfo.iconName} size={12} color="#666" style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
+          <View className="flex-row items-center">
+            <TouchableOpacity 
+              className="flex-row items-center bg-white px-3 py-2 rounded-full border border-gray-200 mr-2"
+              onPress={() => setShowFormatFilter(!showFormatFilter)}
+            >
+              <Ionicons name="funnel-outline" size={16} color="#666" />
+              <Text className="ml-1 text-sm">
+                {selectedFormat ? FILE_FORMATS.find(f => f.id === selectedFormat)?.name : 'Tất cả'}
+              </Text>
+            </TouchableOpacity>
+            
+            {/* Sắp xếp */}
+            <TouchableOpacity 
+              className="flex-row items-center bg-white px-3 py-2 rounded-full border border-gray-200"
+              onPress={() => setShowSortOptions(!showSortOptions)}
+            >
+              <Ionicons name="swap-vertical-outline" size={16} color="#666" />
+              <Text className="ml-1 text-sm">{sortInfo.name}</Text>
+              <Ionicons name={sortInfo.iconName} size={12} color="#666" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Nút xem tất cả */}
+          {pdfs.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => router.push('/AllDocuments')}
+              className="flex-row items-center"
+            >
+              <Text className="text-blue-500 mr-1">Xem tất cả</Text>
+              <Ionicons name="chevron-forward" size={16} color="#3b82f6" />
+            </TouchableOpacity>
+          )}
         </View>
         
         {/* Tùy chọn lọc định dạng */}
@@ -909,17 +922,27 @@ export default function Library() {
               <Text className="mt-4 text-gray-600">Đang tải danh sách PDF...</Text>
             </View>
           ) : pdfs.length > 0 ? (
-            <FlatList
-              data={pdfs}
-              renderItem={renderPdfItem}
-              keyExtractor={item => item.id.toString()}
-              scrollEnabled={false}
-              ListFooterComponent={() => (
-                <Text className="text-center text-gray-500 my-4 text-xs">
-                  {pdfs.length} tài liệu
-                </Text>
+            <View>
+              <FlatList
+                data={pdfs.slice(0, 5)}
+                renderItem={renderPdfItem}
+                keyExtractor={item => item.id.toString()}
+                scrollEnabled={false}
+              />
+              {pdfs.length > 5 && (
+                <TouchableOpacity 
+                  className="mt-4 items-center py-3 bg-gray-50 rounded-lg border border-gray-200"
+                  onPress={() => {
+                    // TODO: Navigate to full list view
+                    router.push('/AllDocuments');
+                  }}
+                >
+                  <Text className="text-blue-500 font-medium">
+                    Xem tất cả ({pdfs.length} tài liệu)
+                  </Text>
+                </TouchableOpacity>
               )}
-            />
+            </View>
           ) : (
             <View className="py-6 items-center">
               <Ionicons name="book-outline" size={50} color="#cccccc" />
