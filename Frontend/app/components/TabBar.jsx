@@ -9,6 +9,7 @@ const TabBar = ({ state, descriptors, navigation }) => {
         Home : (props)=> <Entypo name="home" size={24} color={greyColor} {...props} />,
         Library : (props)=> <Ionicons name='library' size={26} color={greyColor} {...props}/>,
         BookStore : (props)=> <FontAwesome5 name='shopping-bag' size={26} color={greyColor} {...props}/>,
+        Saved : (props)=> <Ionicons name='bookmark' size={26} color={greyColor} {...props}/>,
         Search : (props)=> <FontAwesome5 name='search' size={26} color={greyColor} {...props}/>
     }
 

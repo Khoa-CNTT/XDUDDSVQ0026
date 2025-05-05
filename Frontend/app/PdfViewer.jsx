@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, Linking, Alert, Share, Dimensions, PixelRatio } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, Linking, Alert, Share, Dimensions, PixelRatio, FlatList, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system';
@@ -7,7 +7,6 @@ import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import Slider from '@react-native-community/slider';
 
 
 export default function PdfViewer() {
@@ -27,8 +26,9 @@ export default function PdfViewer() {
   const [controlsVisible, setControlsVisible] = useState(true); // Track if controls are visible
   const [bottomMenuVisible, setBottomMenuVisible] = useState(true); // Track if bottom menu is visible
   const [isHighlighterActive, setIsHighlighterActive] = useState(false); // Track if highlighter is active
-  const [slidingValue, setSlidingValue] = useState(1); // Add new state for tracking during sliding
-
+  const [showMenu, setShowMenu] = useState(false);
+  const [chapters, setChapters] = useState([]);
+  const [activeTab, setActiveTab] = useState('chapters');
 
   // Get screen dimensions for better PDF scaling
   const screenWidth = Dimensions.get('window').width;
@@ -181,6 +181,9 @@ export default function PdfViewer() {
       } catch (recentError) {
         console.error('Error updating recently viewed list:', recentError);
       }
+      
+      // Force a refresh in the app state to ensure other screens pick up changes immediately
+      await AsyncStorage.setItem('reading_progress_updated', new Date().toISOString());
       
       // NOTE: Database saving functionality removed to avoid API errors
      
@@ -525,15 +528,18 @@ export default function PdfViewer() {
               right: 0;
               bottom: 0;
               -webkit-overflow-scrolling: touch;
-              padding-top: 60px; /* Push content down to account for header */
+              padding-top: ${Platform.OS === 'android' ? 56 : 60}px; /* Adjusted for Android */
+              box-sizing: border-box;
             }
             .page-canvas {
-              margin: 0 auto;
               display: block;
               border: none;
               background: white;
               will-change: transform;
               width: 100% !important;
+              height: auto !important;
+              margin: 0 !important;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             }
             #page-info {
               position: fixed;
@@ -596,6 +602,23 @@ export default function PdfViewer() {
               border-radius: 2px;
               pointer-events: none;
             }
+            /* Zoom indicator */
+            #zoom-indicator {
+              position: fixed;
+              bottom: 50px;
+              right: 20px;
+              background-color: rgba(0,0,0,0.5);
+              color: white;
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 12px;
+              z-index: 100;
+              opacity: 0;
+              transition: opacity 0.3s;
+            }
+            #zoom-indicator.visible {
+              opacity: 0.7;
+            }
           </style>
         </head>
         <body>
@@ -612,6 +635,8 @@ export default function PdfViewer() {
           <div id="pdf-container"></div>
          
           <div id="page-info" class="fade">Page ${currentPage} of 1</div>
+          
+          <div id="zoom-indicator">Zoom: 100%</div>
          
           <script>
             // Configure PDF.js worker
@@ -628,12 +653,20 @@ export default function PdfViewer() {
             const loadingProgress = document.getElementById('loading-progress');
             const pageInfo = document.getElementById('page-info');
             const progressBar = document.getElementById('progress-bar');
+            const zoomIndicator = document.getElementById('zoom-indicator');
+            
+            // Detect Android for platform specific adjustments
+            const isAndroid = ${Platform.OS === 'android' ? 'true' : 'false'};
            
             // Calculate initial scale to fit width of phone screen with pixel ratio
             const screenWidth = ${screenWidth};
+            const screenHeight = ${screenHeight};
             const pixelRatio = ${pixelRatio};
-            // Adjust scale to make PDF fit full width
-            const initialScale = Math.max(1.5, (screenWidth / 612)); // Ensure minimum scale of 1.5
+            
+            // Adjust scale to make PDF fit full width with better defaults for Android
+            const initialScale = isAndroid 
+              ? Math.max(1.5, (screenWidth / 600)) 
+              : Math.max(1.5, (screenWidth / 612));
             scale = initialScale;
            
             // Variables for touch handling
@@ -642,6 +675,13 @@ export default function PdfViewer() {
             let touchStartY = 0;
             let touchEndY = 0;
             let lastTap = 0;
+            let tappedTwice = false;
+            
+            // Flag to track if we're zoomed in (to disable page swiping)
+            let isZoomedIn = false;
+            
+            // Improved swipe detection with threshold
+            const SWIPE_THRESHOLD = 50;
            
             // Variables for highlighting
             let isHighlighterEnabled = false;
@@ -661,6 +701,22 @@ export default function PdfViewer() {
               }, 2000);
             }
 
+            // Function to show zoom level
+            function showZoomLevel() {
+              const percentage = Math.round((scale / initialScale) * 100);
+              zoomIndicator.textContent = 'Zoom: ' + percentage + '%';
+              zoomIndicator.classList.add('visible');
+              
+              // Check if zoomed in to disable page swiping
+              isZoomedIn = scale > initialScale * 1.05; // Allow a small buffer for rounding errors
+              
+              // Show zoom indicator for 2 seconds
+              clearTimeout(zoomIndicatorTimeout);
+              zoomIndicatorTimeout = setTimeout(() => {
+                zoomIndicator.classList.remove('visible');
+              }, 2000);
+            }
+            let zoomIndicatorTimeout;
 
             // Function to store the current viewer state
             function logState() {
@@ -683,6 +739,7 @@ export default function PdfViewer() {
               const progress = Math.floor((currentPage / pdfDoc.numPages) * 100);
               progressBar.style.width = progress + '%';
              
+              // Always notify React Native when page changes
               window.ReactNativeWebView.postMessage('PAGE_CHANGE:' + currentPage + ':' + pdfDoc.numPages);
              
               const oldCanvas = container.querySelector('.page-canvas');
@@ -696,7 +753,18 @@ export default function PdfViewer() {
              
               requestAnimationFrame(() => {
                 pdfDoc.getPage(num).then(function(page) {
-                  const viewport = page.getViewport({ scale: scale });
+                  // Calculate viewport to fit width perfectly (especially for Android)
+                  const pageWidth = page.getViewport({ scale: 1.0 }).width;
+                  const containerWidth = container.clientWidth;
+                  
+                  // Get the best scale to fit the page width to container
+                  const optimalScale = containerWidth / pageWidth;
+                  
+                  // For Android, we want to make sure the page fills the width completely
+                  const finalScale = isAndroid ? Math.max(scale, optimalScale) : scale;
+                  
+                  const viewport = page.getViewport({ scale: finalScale });
+                  
                   const canvas = document.createElement('canvas');
                   canvas.className = 'page-canvas';
                   canvas.style.opacity = '0';
@@ -706,7 +774,7 @@ export default function PdfViewer() {
                   canvas.width = Math.floor(viewport.width * outputScale);
                   canvas.height = Math.floor(viewport.height * outputScale);
                  
-                  // Set canvas style width to 100% of container
+                  // Set canvas style width to 100% of container for Android
                   canvas.style.width = '100%';
                   canvas.style.maxWidth = 'none';
                  
@@ -776,14 +844,16 @@ export default function PdfViewer() {
             function goToPrevPage() {
               if (currentPage <= 1) return;
               queueRenderPage(currentPage - 1);
+              return true;
             }
            
             function goToNextPage() {
               if (currentPage >= pdfDoc.numPages) return;
               queueRenderPage(currentPage + 1);
+              return true;
             }
            
-            // Touch navigation setup
+            // Improved touch navigation setup with better double-tap detection
             function handleTouchStart(evt) {
               // Skip if highlighter is enabled
               if (isHighlighterEnabled) {
@@ -799,15 +869,36 @@ export default function PdfViewer() {
               touchStartX = evt.changedTouches[0].screenX;
               touchStartY = evt.changedTouches[0].screenY;
              
-              // Detect single tap for toggling menu
+              // Improved double-tap detection
               const currentTime = new Date().getTime();
               const tapLength = currentTime - lastTap;
+              
               if (tapLength < 300 && tapLength > 0) {
-                // Double tap detected - don't use for menu toggle
+                tappedTwice = true;
+                // Handle double tap - toggle zoom
+                evt.preventDefault();
+                
+                // Toggle between fit width and higher zoom
+                if (scale > initialScale) {
+                  scale = initialScale;
+                } else {
+                  // On Android use a higher zoom level for better readability
+                  scale = isAndroid ? initialScale * 2.5 : initialScale * 2.0;
+                }
+                
+                // Update zoom indicator and render page
+                showZoomLevel();
+                queueRenderPage(currentPage);
               } else {
-                // Single tap - use later in touchend to toggle menu if not a swipe
-                lastTap = currentTime;
+                tappedTwice = false;
+                setTimeout(() => {
+                  if (!tappedTwice) {
+                    // This was a single tap and will be handled in touchend
+                    // for menu toggling if no swipe is detected
+                  }
+                }, 300);
               }
+              lastTap = currentTime;
             }
            
             function handleTouchMove(evt) {
@@ -896,26 +987,41 @@ export default function PdfViewer() {
               const deltaX = Math.abs(touchEndX - touchStartX);
               const deltaY = Math.abs(touchEndY - touchStartY);
              
-              // If it's a swipe (significant horizontal movement and not too much vertical movement)
-              if (deltaX > 75 && deltaY < 50) {
-                handleSwipe();
+              // Only handle swipe if not zoomed in
+              if (!isZoomedIn) {
+                // If it's a swipe (significant horizontal movement and not too much vertical movement)
+                if (deltaX > SWIPE_THRESHOLD && deltaY < 75) {
+                  // This was a swipe - handle page navigation
+                  handleSwipe();
+                }
               }
+              
               // If it's a tap (very little movement in any direction)
-              else if (deltaX < 10 && deltaY < 10) {
+              if (deltaX < 10 && deltaY < 10 && !tappedTwice) {
                 // Toggle menu on tap
                 window.ReactNativeWebView.postMessage('TOGGLE_MENU');
               }
             }
            
             function handleSwipe() {
-              const swipeThreshold = 75; // Minimum distance for swipe
-              if (touchEndX < touchStartX - swipeThreshold) {
+              // Only process swipes for navigation if we're not zoomed in
+              if (isZoomedIn) return;
+              
+              if (touchEndX < touchStartX - SWIPE_THRESHOLD) {
                 // Swipe left - go to next page
-                goToNextPage();
+                if (goToNextPage()) {
+                  // Prevent other tap events if page navigated
+                  tappedTwice = true;
+                  setTimeout(() => { tappedTwice = false; }, 100);
+                }
               }
-              if (touchEndX > touchStartX + swipeThreshold) {
+              if (touchEndX > touchStartX + SWIPE_THRESHOLD) {
                 // Swipe right - go to previous page
-                goToPrevPage();
+                if (goToPrevPage()) {
+                  // Prevent other tap events if page navigated
+                  tappedTwice = true;
+                  setTimeout(() => { tappedTwice = false; }, 100);
+                }
               }
             }
            
@@ -970,22 +1076,13 @@ export default function PdfViewer() {
             document.addEventListener('touchmove', handleTouchMove, false);
             document.addEventListener('touchend', handleTouchEnd, false);
            
-            // Zoom functions
-            function onZoomIn() {
-              scale += 0.2;
-              queueRenderPage(currentPage);
-            }
-           
-            function onZoomOut() {
-              if (scale <= 0.4) return;
-              scale -= 0.2;
-              queueRenderPage(currentPage);
-            }
-           
-            function onFitWidth() {
-              scale = initialScale;
-              queueRenderPage(currentPage);
-            }
+            // Handle window resize to make sure PDF fits the screen properly
+            window.addEventListener('resize', function() {
+              if (pdfDoc && !pageRendering) {
+                // Re-render the current page to adjust to new screen size
+                queueRenderPage(currentPage);
+              }
+            });
            
             // Optimized PDF loading
             async function renderPDF() {
@@ -1035,6 +1132,18 @@ export default function PdfViewer() {
                         loadHighlights();
                        
                         window.ReactNativeWebView.postMessage('PDF_LOADED');
+                        
+                        // Special handling for Android - force initial render to fit width properly
+                        if (isAndroid) {
+                          setTimeout(() => {
+                            const containerWidth = container.clientWidth;
+                            const canvas = container.querySelector('.page-canvas');
+                            if (canvas) {
+                              // Make sure the canvas width is optimal
+                              canvas.style.width = '100%';
+                            }
+                          }, 500);
+                        }
                       } catch (error) {
                         console.error('Error rendering PDF:', error);
                         window.ReactNativeWebView.postMessage('PDF_ERROR: ' + error.message);
@@ -1348,9 +1457,30 @@ export default function PdfViewer() {
       if (parts.length === 3) {
         const page = parseInt(parts[1], 10);
         const total = parseInt(parts[2], 10);
-        if (!isNaN(page) && !isNaN(total) && (page !== currentPage || total !== totalPages)) {
-          setCurrentPage(page);
-          setTotalPages(total);
+        
+        // Make sure the received page is valid
+        if (!isNaN(page) && page > 0 && !isNaN(total) && total > 0) {
+          console.log(`Received page change notification: ${page}/${total}`);
+          
+          // Only update if the values are different to avoid loops
+          let shouldUpdate = false;
+          
+          if (page !== currentPage) {
+            shouldUpdate = true;
+            setCurrentPage(page);
+          }
+          
+          if (total !== totalPages && total > 0) {
+            shouldUpdate = true;
+            setTotalPages(total);
+          }
+          
+          // Immediately save progress when page changes from the viewer
+          if (shouldUpdate) {
+            console.log('Saving reading progress after page change from viewer');
+            // Use setTimeout to ensure state updates have completed
+            setTimeout(() => saveReadingProgress(), 100);
+          }
         }
       }
     }
@@ -1358,9 +1488,22 @@ export default function PdfViewer() {
     // Handle total pages message
     if (message.startsWith('TOTAL_PAGES:')) {
       const total = parseInt(message.split(':')[1], 10);
-      if (!isNaN(total) && total > 0) {
+      if (!isNaN(total) && total > 0 && total !== totalPages) {
+        console.log(`Setting total pages to ${total}`);
         setTotalPages(total);
       }
+    }
+
+    // Add this to handleWebViewMessage function
+    if (message.startsWith('CHAPTERS_DATA:')) {
+      try {
+        const chaptersData = JSON.parse(message.replace('CHAPTERS_DATA:', ''));
+        setChapters(chaptersData);
+      } catch (error) {
+        console.error('Error parsing chapters data:', error);
+      }
+    } else if (message.startsWith('CHAPTERS_ERROR:')) {
+      console.error('Error extracting chapters:', message.replace('CHAPTERS_ERROR:', ''));
     }
   };
  
@@ -1403,32 +1546,88 @@ export default function PdfViewer() {
       `);
     }
   };
- 
-  // Update slidingValue when currentPage changes
+
+
+  // Add this useEffect to sync the PDF view with current page changes
   useEffect(() => {
-    setSlidingValue(currentPage);
-    
-    // If loading a PDF with saved progress, ensure the viewer goes to the saved page
-    if (webViewRef.current && currentPage > 1) {
+    if (webViewRef.current && pdfLoadedRef.current && currentPage > 0 && totalPages > 0) {
+      console.log(`Syncing PDF page to ${currentPage}`);
       webViewRef.current.injectJavaScript(`
         queueRenderPage(${currentPage});
         true;
       `);
     }
-  }, [currentPage]);
+  }, [currentPage, totalPages]);
 
 
-  // Function to handle page slider change
-  const handlePageChange = (pageNumber) => {
-    const page = Math.round(pageNumber);
-    setCurrentPage(page);
-    if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        queueRenderPage(${page});
-        true;
-      `);
+  // Add specific functions for page navigation
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(prevPage => prevPage + 1);
     }
   };
+
+
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(prevPage => prevPage - 1);
+    }
+  };
+
+
+  const extractChapters = async () => {
+    if (!webViewRef.current) return;
+
+    webViewRef.current.injectJavaScript(`
+      (async function() {
+        try {
+          if (!pdfDoc) {
+            window.ReactNativeWebView.postMessage('CHAPTERS_ERROR:PDF not loaded');
+            return;
+          }
+
+          const outline = await pdfDoc.getOutline();
+          if (!outline) {
+            window.ReactNativeWebView.postMessage('CHAPTERS_ERROR:No outline found');
+            return;
+          }
+
+          const chapters = [];
+          let id = 1;
+
+          async function processOutline(items) {
+            for (const item of items) {
+              if (item.dest) {
+                const page = await pdfDoc.getPageIndex(item.dest[0]);
+                chapters.push({
+                  id: id++,
+                  title: item.title,
+                  page: page + 1
+                });
+              }
+              if (item.items) {
+                await processOutline(item.items);
+              }
+            }
+          }
+
+          await processOutline(outline);
+          window.ReactNativeWebView.postMessage('CHAPTERS_DATA:' + JSON.stringify(chapters));
+        } catch (error) {
+          window.ReactNativeWebView.postMessage('CHAPTERS_ERROR:' + error.message);
+        }
+      })();
+      true;
+    `);
+  };
+
+
+  // Add this to useEffect where PDF is loaded
+  useEffect(() => {
+    if (pdfLoadedRef.current) {
+      extractChapters();
+    }
+  }, [pdfLoadedRef.current]);
 
 
   return (
@@ -1445,21 +1644,12 @@ export default function PdfViewer() {
           {pdfInfo?.title || 'PDF Viewer'}
         </Text>
        
-        {/* Zoom controls */}
-        <View style={styles.zoomControls}>
-          <TouchableOpacity style={styles.zoomButton} onPress={handleZoomOut}>
-            <Icon name="zoom-out" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomButton} onPress={handleZoomIn}>
-            <Icon name="zoom-in" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.zoomButton} onPress={handleFitWidth}>
-            <Text style={styles.zoomText}>Fit</Text>
-          </TouchableOpacity>
-        </View>
-       
         <TouchableOpacity style={styles.debugButton} onPress={showDebugInfo}>
           <Icon name="info" size={20} color="#fff" />
+        </TouchableOpacity>
+       
+        <TouchableOpacity style={styles.menuButton} onPress={() => setShowMenu(true)}>
+          <Icon name="menu" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -1522,34 +1712,140 @@ export default function PdfViewer() {
             )}
           </View>
          
-          {/* Bottom menu bar */}
+          {/* Bottom menu bar with buttons instead of slider */}
           <View style={[
             styles.bottomMenu,
             bottomMenuVisible ? null : styles.bottomMenuHidden
           ]}>
-            <Slider
-              style={styles.pageSlider}
-              minimumValue={1}
-              maximumValue={totalPages}
-              value={slidingValue}
-              step={1}
-              onValueChange={(value) => setSlidingValue(Math.round(value))}
-              onSlidingComplete={(value) => handlePageChange(Math.round(value))}
-              minimumTrackTintColor="#3b82f6"
-              maximumTrackTintColor="#d1d5db"
-              thumbTintColor="#3b82f6"
-            />
-            <View style={styles.pageInfo}>
-              <Text style={styles.pageText}>
-                {slidingValue} / {totalPages}
-              </Text>
+            <View style={styles.pageNavigationContainer}>
+              <TouchableOpacity 
+                style={styles.navButton}
+                onPress={goToPrevPage}
+                disabled={currentPage <= 1}
+              >
+                <Icon name="navigate-before" size={28} color={currentPage <= 1 ? "#ccc" : "#3b82f6"} />
+              </TouchableOpacity>
+              
+              <View style={styles.pageInfo}>
+                <Text style={styles.pageText}>
+                  {currentPage} / {totalPages}
+                </Text>
+              </View>
+              
+              <TouchableOpacity 
+                style={styles.navButton}
+                onPress={goToNextPage}
+                disabled={currentPage >= totalPages}
+              >
+                <Icon name="navigate-next" size={28} color={currentPage >= totalPages ? "#ccc" : "#3b82f6"} />
+              </TouchableOpacity>
             </View>
+            
             <TouchableOpacity
               style={[styles.highlighterButton, isHighlighterActive && styles.highlighterActive]}
               onPress={toggleHighlighter}
             >
               <Icon name="edit" size={24} color={isHighlighterActive ? "#fff" : "#3b82f6"} />
             </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {showMenu && (
+        <View style={styles.menuModal}>
+          <View style={styles.menuContent}>
+            <View style={styles.menuHeader}>
+              <Text style={styles.menuTitle}>Menu</Text>
+              <TouchableOpacity onPress={() => setShowMenu(false)}>
+                <Icon name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            
+            <View style={styles.menuTabs}>
+              <TouchableOpacity 
+                style={[styles.menuTab, activeTab === 'chapters' && styles.activeTab]}
+                onPress={() => setActiveTab('chapters')}
+              >
+                <Text style={[styles.menuTabText, activeTab === 'chapters' && styles.activeTabText]}>Chapters</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.menuTab, activeTab === 'pages' && styles.activeTab]}
+                onPress={() => setActiveTab('pages')}
+              >
+                <Text style={[styles.menuTabText, activeTab === 'pages' && styles.activeTabText]}>Pages</Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeTab === 'chapters' ? (
+              <FlatList
+                data={chapters}
+                renderItem={({ item }) => {
+                  // Check if current page is within this chapter's range
+                  const isCurrentChapter = currentPage === item.page;
+                  return (
+                    <TouchableOpacity 
+                      style={[styles.chapterItem, isCurrentChapter && styles.currentChapterItem]}
+                      onPress={() => {
+                        setCurrentPage(item.page);
+                        setShowMenu(false);
+                      }}
+                    >
+                      <View style={styles.chapterContent}>
+                        <Text style={[styles.chapterTitle, isCurrentChapter && styles.currentChapterText]}>
+                          {item.title}
+                        </Text>
+                        <Text style={[styles.chapterPage, isCurrentChapter && styles.currentChapterText]}>
+                          Page {item.page}
+                        </Text>
+                      </View>
+                      {isCurrentChapter && (
+                        <Icon name="check-circle" size={20} color="#3b82f6" />
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
+                keyExtractor={item => item.id}
+              />
+            ) : (
+              <ScrollView style={styles.pagesScrollView}>
+                <View style={styles.pagesGrid}>
+                  {Array.from({ length: Math.ceil(totalPages / 30) }, (_, i) => (
+                    <View key={i} style={styles.pageSection}>
+                      <Text style={styles.pageSectionTitle}>
+                        {i * 30 + 1} - {Math.min((i + 1) * 30, totalPages)}
+                      </Text>
+                      <View style={styles.pageButtonsGrid}>
+                        {Array.from(
+                          { length: Math.min(30, totalPages - i * 30) },
+                          (_, j) => i * 30 + j + 1
+                        ).map(page => (
+                          <TouchableOpacity
+                            key={page}
+                            style={[
+                              styles.pageButton,
+                              currentPage === page && styles.currentPageButton
+                            ]}
+                            onPress={() => {
+                              setCurrentPage(page);
+                              setShowMenu(false);
+                            }}
+                          >
+                            <Text 
+                              style={[
+                                styles.pageButtonText,
+                                currentPage === page && styles.currentPageButtonText
+                              ]}
+                            >
+                              {page}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
           </View>
         </View>
       )}
@@ -1701,18 +1997,165 @@ const styles = StyleSheet.create({
   bottomMenuHidden: {
     transform: [{ translateY: 100 }],
   },
-  pageSlider: {
+  pageNavigationContainer: {
     flex: 1,
-    height: 40,
-    marginRight: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navButton: {
+    padding: 8,
+    borderRadius: 30,
+    backgroundColor: 'rgba(235, 235, 235, 0.5)',
   },
   pageInfo: {
-    marginRight: 15,
-    minWidth: 60,
+    marginHorizontal: 15,
     alignItems: 'center',
+    minWidth: 80,
   },
   pageText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  highlighterButton: {
+    marginLeft: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  highlighterActive: {
+    backgroundColor: '#3b82f6',
+  },
+  menuButton: {
+    marginLeft: 16,
+  },
+  menuModal: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    zIndex: 1000,
+  },
+  menuContent: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 88 : 56,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+  },
+  menuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  menuTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  menuTabs: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  menuTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  activeTab: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#3b82f6',
+  },
+  menuTabText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  activeTabText: {
+    color: '#3b82f6',
+    fontWeight: 'bold',
+  },
+  chapterItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  currentChapterItem: {
+    backgroundColor: '#f0f9ff',
+    borderLeftWidth: 4,
+    borderLeftColor: '#3b82f6',
+  },
+  chapterContent: {
+    flex: 1,
+  },
+  chapterTitle: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 4,
+  },
+  currentChapterText: {
+    color: '#3b82f6',
+    fontWeight: 'bold',
+  },
+  chapterPage: {
     fontSize: 14,
-},
+    color: '#6b7280',
+  },
+  pagesScrollView: {
+    flex: 1,
+  },
+  pagesGrid: {
+    padding: 8,
+  },
+  pageSection: {
+    marginBottom: 16,
+  },
+  pageSectionTitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  pageButtonsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4, // Compensate for pageButton margin
+  },
+  pageButton: {
+    width: '16.666%', // Show 6 buttons per row
+    aspectRatio: undefined, // Remove fixed aspect ratio
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 6,
+    margin: 4,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 6,
+  },
+  currentPageButton: {
+    backgroundColor: '#3b82f6',
+  },
+  pageButtonText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  currentPageButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
 });
 
