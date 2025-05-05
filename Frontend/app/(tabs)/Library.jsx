@@ -11,12 +11,17 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  RefreshControl,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import * as FileSystem from 'expo-file-system';
+import RenderBookItem from "../components/Home/RenderBookItem"
+import SectionHeader from '../components/SectionHeader';
+import booksData from '../../assets/booksData';
 
 // Tính toán kích thước phù hợp
 const { width } = Dimensions.get("window");
@@ -29,6 +34,8 @@ const FILE_FORMATS = [
   { id: 'doc', name: 'DOC/DOCX', icon: 'document', color: '#1e88e5' },
   { id: 'txt', name: 'TXT', icon: 'text', color: '#757575' },
 ];
+
+const SPACING = 16;
 
 export default function Library() {
   const router = useRouter();
@@ -44,11 +51,20 @@ export default function Library() {
   const [showCreateShelf, setShowCreateShelf] = useState(false);
   const [newShelfName, setNewShelfName] = useState('');
   const [bookshelves, setBookshelves] = useState([]);
+  const [savedBooks, setSavedBooks] = useState([]);
+  const [favoriteBooks, setFavoriteBooks] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [apiBooks, setApiBooks] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Sử dụng useEffect để tải dữ liệu
   useEffect(() => {
     loadReadingProgress();
     loadBookshelves();
+    fetchBooksFromAPI();
+    loadSavedBooks();
+    loadFavoriteBooks();
   }, []);
   
   // Sử dụng useFocusEffect để tải lại dữ liệu mỗi khi màn hình được focus
@@ -57,11 +73,33 @@ export default function Library() {
       loadReadingProgress();
       fetchPDFs();
       
+      // Set up listener for reading progress updates
+      const checkForProgressUpdates = async () => {
+        try {
+          const lastUpdate = await AsyncStorage.getItem('reading_progress_updated');
+          if (lastUpdate && lastUpdate !== lastCheckedUpdate.current) {
+            console.log('Reading progress was updated, refreshing library data...');
+            lastCheckedUpdate.current = lastUpdate;
+            loadReadingProgress();
+            fetchPDFs();
+          }
+        } catch (error) {
+          console.error('Error checking for reading progress updates:', error);
+        }
+      };
+      
+      // Check immediately and set up interval
+      checkForProgressUpdates();
+      const updateInterval = setInterval(checkForProgressUpdates, 3000); // Check every 3 seconds
+      
       return () => {
-        // Cleanup nếu cần
+        clearInterval(updateInterval);
       };
     }, [selectedFormat, sortBy, sortDirection, searchQuery])
   );
+  
+  // Reference to track last checked update time
+  const lastCheckedUpdate = React.useRef('');
   
   // Function để tính toán tiến độ đọc một cách nhất quán
   const getReadingProgressForPdf = (pdfId) => {
@@ -287,6 +325,7 @@ export default function Library() {
         
         // Process PDFs and enhance with reading progress
         filteredDocs = filteredDocs.map(doc => {
+          // Always recalculate progress using the common function
           const progress = getReadingProgressForPdf(doc.id);
           return {
             ...doc,
@@ -412,8 +451,8 @@ export default function Library() {
   
   // Render từng PDF item
   const renderPdfItem = ({ item }) => {
-    // Sử dụng tiến độ đọc từ item thay vì từ phương thức getReadingProgress
-    const progressPercent = item.progress || 0;
+    // Always recalculate reading progress at render time
+    const progressPercent = getReadingProgressForPdf(item.id);
     
     // Lấy danh sách các kệ sách chứa cuốn sách này
     const containingShelves = bookshelves.filter(shelf => 
@@ -563,6 +602,164 @@ export default function Library() {
   };
 
   const sortInfo = getSortInfo();
+
+  const fetchBooksFromAPI = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`${API_URL}/books`);
+      const data = await response.json();
+      
+      if (data.status && data.data) {
+        const books = data.data.map(book => ({
+          id: book.book_id,
+          title: book.name_book,
+          author: book.author ? book.author.name_author : 'Unknown Author',
+          image: book.image,
+          file_path: book.file_path,
+          price: book.is_free ? 'Miễn phí' : `${book.price} ₫`,
+          rating: Math.floor(Math.random() * 5) + 1,
+          category_id: book.category_id,
+        }));
+        
+        setApiBooks(books);
+      } else {
+        console.warn("API trả về dữ liệu không đúng cấu trúc");
+        
+        // Sử dụng dữ liệu local nếu API không hoạt động
+        const localBooks = [
+          ...booksData.featuredBooks,
+          ...booksData.bestSellers,
+          ...booksData.freeBooks
+        ];
+        setApiBooks(localBooks);
+      }
+    } catch (error) {
+      console.error('Error fetching books:', error);
+      setError("Lỗi khi tải dữ liệu sách");
+      
+      // Sử dụng dữ liệu local nếu API không hoạt động
+      const localBooks = [
+        ...booksData.featuredBooks,
+        ...booksData.bestSellers,
+        ...booksData.freeBooks
+      ];
+      setApiBooks(localBooks);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadSavedBooks = async () => {
+    try {
+      const savedBookIds = await AsyncStorage.getItem('savedBooks');
+      if (savedBookIds) {
+        const bookIds = JSON.parse(savedBookIds);
+        
+        // Kết hợp sách từ API và sách local
+        const allBooks = [
+          ...apiBooks,
+          ...booksData.featuredBooks,
+          ...booksData.bestSellers,
+          ...booksData.freeBooks
+        ];
+        
+        // Tìm sách dựa trên ID hoặc book_id
+        const savedBooksData = allBooks.filter(book => {
+          const bookId = book.id || book.book_id;
+          return bookIds.some(id => id === bookId || 
+            // Kiểm tra thêm trường hợp ID với tiền tố BOOK
+            (bookId && bookId.startsWith('BOOK') && id === bookId) || 
+            (id && id.startsWith('BOOK') && id === bookId));
+        });
+        
+        setSavedBooks(savedBooksData);
+      } else {
+        setSavedBooks([]);
+      }
+    } catch (error) {
+      console.error('Error loading saved books:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách sách đã lưu');
+    }
+  };
+
+  const loadFavoriteBooks = async () => {
+    try {
+      const favoriteBookIds = await AsyncStorage.getItem('favoriteBooks');
+      if (favoriteBookIds) {
+        const bookIds = JSON.parse(favoriteBookIds);
+        
+        // Kết hợp sách từ API và sách local
+        const allBooks = [
+          ...apiBooks,
+          ...booksData.featuredBooks,
+          ...booksData.bestSellers,
+          ...booksData.freeBooks
+        ];
+        
+        // Tìm sách dựa trên ID hoặc book_id
+        const favoriteBooksData = allBooks.filter(book => {
+          const bookId = book.id || book.book_id;
+          return bookIds.some(id => id === bookId || 
+            // Kiểm tra thêm trường hợp ID với tiền tố BOOK
+            (bookId && bookId.startsWith('BOOK') && id === bookId) || 
+            (id && id.startsWith('BOOK') && id === bookId));
+        });
+        
+        setFavoriteBooks(favoriteBooksData);
+      } else {
+        setFavoriteBooks([]);
+      }
+    } catch (error) {
+      console.error('Error loading favorite books:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách sách yêu thích');
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchBooksFromAPI();
+    await loadSavedBooks();
+    await loadFavoriteBooks();
+    setRefreshing(false);
+  };
+
+  const renderSection = ({ section }) => {
+    return (
+      <View key={section.id}>
+        <SectionHeader title={section.title} />
+        {section.data.length > 0 ? (
+          <FlatList
+            data={section.data}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => <RenderBookItem item={item} />}
+            keyExtractor={(item) => item.id || item.book_id}
+            contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING * 2 }}
+          />
+        ) : (
+          <View className="px-4 py-8 items-center">
+            <Text className="text-gray-500">Chưa có sách nào trong danh mục này</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const sections = [
+    { id: 'saved', title: 'Đã Lưu', data: savedBooks },
+    { id: 'favorites', title: 'Yêu Thích', data: favoriteBooks },
+  ];
+
+  if (isLoading) {
+    return (
+      <View className="flex-1 justify-center items-center">
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text className="mt-4 text-gray-500">Đang tải dữ liệu...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
@@ -744,7 +941,7 @@ export default function Library() {
         </View>
       </ScrollView>
       
-     
+      <View className="h-24" />
     </SafeAreaView>
   );
 }

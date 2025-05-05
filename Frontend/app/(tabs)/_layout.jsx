@@ -28,6 +28,13 @@ export default function _layout() {
             headerShown: false,
         }}
         />
+        <Tabs.Screen name="Saved"
+          options={{
+            headerTransparent: true,
+            headerTitle: '',
+            headerShown: false,
+        }}
+        />
         <Tabs.Screen name="Search"
           options={{
             headerTransparent: true,

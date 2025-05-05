@@ -36,11 +36,33 @@ export default function HomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       loadReadingProgressAndPdfs();
+      
+      // Set up listener for reading progress updates
+      const checkForProgressUpdates = async () => {
+        try {
+          const lastUpdate = await AsyncStorage.getItem('reading_progress_updated');
+          if (lastUpdate && lastUpdate !== lastCheckedUpdate.current) {
+            console.log('Reading progress was updated, refreshing data...');
+            lastCheckedUpdate.current = lastUpdate;
+            loadReadingProgressAndPdfs();
+          }
+        } catch (error) {
+          console.error('Error checking for reading progress updates:', error);
+        }
+      };
+      
+      // Check immediately and set up interval
+      checkForProgressUpdates();
+      const updateInterval = setInterval(checkForProgressUpdates, 3000); // Check every 3 seconds
+      
       return () => {
-        // cleanup if needed
+        clearInterval(updateInterval);
       };
     }, [])
   );
+  
+  // Reference to track last checked update time
+  const lastCheckedUpdate = React.useRef('');
 
   // Load reading progress and PDFs data
   const loadReadingProgressAndPdfs = async () => {
@@ -67,9 +89,13 @@ export default function HomeScreen() {
         
         progressItems.forEach(([key, value]) => {
           if (value) {
-            const pdfId = key.replace('pdf_progress_', '');
-            const progress = JSON.parse(value);
-            progressData[pdfId] = progress;
+            try {
+              const pdfId = key.replace('pdf_progress_', '');
+              const progress = JSON.parse(value);
+              progressData[pdfId] = progress;
+            } catch (parseError) {
+              console.error('Error parsing progress data:', parseError);
+            }
           }
         });
         
@@ -121,7 +147,6 @@ export default function HomeScreen() {
       
       if (data.success) {
         const pdfs = data.data;
-        setAllPdfs(pdfs);
         
         // Get recently viewed document IDs
         const recentlyViewedKey = 'recently_viewed_docs';
@@ -132,9 +157,11 @@ export default function HomeScreen() {
         const recentlyRead = [];
         const completed = [];
         const inProgress = [];
+        const processedPdfs = [];
         
         // Process all PDFs and check for reading progress
         pdfs.forEach(pdf => {
+          // Always recalculate progress using the common function
           const percentComplete = getReadingProgressForPdf(pdf.id);
           const progress = readingProgress[pdf.id];
           
@@ -148,6 +175,9 @@ export default function HomeScreen() {
             totalPages: progress?.total || 1,
             timestamp: timestamp
           };
+          
+          // Add to processed pdfs list
+          processedPdfs.push(pdfWithProgress);
           
           // Check if this is a recently viewed document
           const isRecentlyViewed = recentlyViewedIds.includes(pdf.id.toString());
@@ -184,6 +214,7 @@ export default function HomeScreen() {
         
         setRecentlyReadPdfs(recentlyRead);
         setCompletedPdfs(completed);
+        setAllPdfs(processedPdfs);
       }
     } catch (error) {
       console.error('Error fetching PDFs:', error);
@@ -269,11 +300,11 @@ export default function HomeScreen() {
                       <View className="h-1 bg-gray-200 rounded-full flex-1 mr-2">
                         <View
                           className="h-1 bg-blue-500 rounded-full"
-                          style={{ width: `${item.progress}%` }}
+                          style={{ width: `${getReadingProgressForPdf(item.id)}%` }}
                         />
                       </View>
                       <Text className="text-gray-400 text-xs">
-                        {item.progress}%
+                        {getReadingProgressForPdf(item.id)}%
                       </Text>
                     </View>
                   </TouchableOpacity>
