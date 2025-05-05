@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, Linking, Alert, Share, Dimensions, PixelRatio, FlatList, ScrollView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
@@ -37,6 +37,7 @@ export default function PdfViewer() {
 
   // Reference to track if the PDF has loaded
   const pdfLoadedRef = useRef(false);
+  const loadedChapters = useRef(false);
 
 
   useEffect(() => {
@@ -1404,9 +1405,37 @@ export default function PdfViewer() {
     );
   };
  
+  // Xác định chapter hiện tại dựa trên trang hiện tại
+  const currentChapter = useMemo(() => {
+    if (!chapters || chapters.length === 0) return null;
+    
+    // Sắp xếp chapters theo số trang
+    const sortedChapters = [...chapters].sort((a, b) => a.page - b.page);
+    
+    // Tìm chapter hiện tại dựa trên trang
+    let foundChapter = sortedChapters[0]; // Mặc định là chapter đầu tiên
+    
+    for (let i = 0; i < sortedChapters.length; i++) {
+      if (currentPage >= sortedChapters[i].page) {
+        foundChapter = sortedChapters[i];
+      } else {
+        break; // Dừng khi tìm thấy chapter có số trang lớn hơn trang hiện tại
+      }
+    }
+    
+    return foundChapter;
+  }, [chapters, currentPage]);
+  
+  // Log khi chapter hiện tại thay đổi (để debug)
+  useEffect(() => {
+    if (currentChapter) {
+      console.log(`Current chapter: ${currentChapter.title} (Page ${currentChapter.page})`);
+    }
+  }, [currentChapter]);
+ 
   const handleWebViewMessage = (event) => {
     const message = event.nativeEvent.data;
-    console.log('WebView message:', message);
+    // console.log('WebView message:', message);
    
     if (message === 'TOGGLE_MENU') {
       toggleBottomMenu();
@@ -1419,6 +1448,7 @@ export default function PdfViewer() {
     
     // Track when PDF has fully loaded
     if (message === 'PDF_LOADED') {
+      console.log('PDF fully loaded');
       pdfLoadedRef.current = true;
       
       // If we have a saved page position, navigate to it
@@ -1428,6 +1458,14 @@ export default function PdfViewer() {
           queueRenderPage(${currentPage});
           true;
         `);
+      }
+      
+      // Extract chapters after PDF is loaded
+      if (!loadedChapters.current) {
+        console.log('Scheduling chapters extraction...');
+        setTimeout(() => {
+          extractChapters();
+        }, 1000);
       }
     }
    
@@ -1494,16 +1532,45 @@ export default function PdfViewer() {
       }
     }
 
-    // Add this to handleWebViewMessage function
+    // Xử lý thông tin chapters từ WebView
     if (message.startsWith('CHAPTERS_DATA:')) {
       try {
         const chaptersData = JSON.parse(message.replace('CHAPTERS_DATA:', ''));
-        setChapters(chaptersData);
+        console.log(`Received ${chaptersData.length} chapters from PDF`);
+        
+        // Nếu không có chapters, tạo chapters tự động
+        if (chaptersData.length === 0) {
+          const autoChapters = [];
+          for (let i = 1; i <= totalPages; i += 10) {
+            autoChapters.push({
+              id: i,
+              title: `Page ${i}`,
+              page: i
+            });
+          }
+          setChapters(autoChapters);
+        } else {
+          setChapters(chaptersData);
+        }
+        
+        loadedChapters.current = true;
       } catch (error) {
         console.error('Error parsing chapters data:', error);
       }
     } else if (message.startsWith('CHAPTERS_ERROR:')) {
       console.error('Error extracting chapters:', message.replace('CHAPTERS_ERROR:', ''));
+      // Nếu không thể trích xuất chapters, tạo chapters tự động dựa trên số trang
+      if (totalPages > 0) {
+        const autoChapters = [];
+        for (let i = 1; i <= totalPages; i += 10) {
+          autoChapters.push({
+            id: i,
+            title: `Page ${i}`,
+            page: i
+          });
+        }
+        setChapters(autoChapters);
+      }
     }
   };
  
@@ -1577,6 +1644,9 @@ export default function PdfViewer() {
 
   const extractChapters = async () => {
     if (!webViewRef.current) return;
+    
+    console.log('Extracting PDF chapters...');
+    loadedChapters.current = false;
 
     webViewRef.current.injectJavaScript(`
       (async function() {
@@ -1587,8 +1657,25 @@ export default function PdfViewer() {
           }
 
           const outline = await pdfDoc.getOutline();
-          if (!outline) {
+          if (!outline || outline.length === 0) {
             window.ReactNativeWebView.postMessage('CHAPTERS_ERROR:No outline found');
+            // Nếu không có outline, tạo chapters tự động theo số trang
+            const autoChapters = [];
+            const totalPages = pdfDoc.numPages;
+            
+            // Tạo chapters mỗi 10 trang
+            const chapterInterval = Math.min(10, Math.ceil(totalPages / 10));
+            for (let i = 1; i <= totalPages; i += chapterInterval) {
+              autoChapters.push({
+                id: autoChapters.length + 1,
+                title: 'Page ' + i,
+                page: i
+              });
+            }
+            
+            if (autoChapters.length > 0) {
+              window.ReactNativeWebView.postMessage('CHAPTERS_DATA:' + JSON.stringify(autoChapters));
+            }
             return;
           }
 
@@ -1598,22 +1685,32 @@ export default function PdfViewer() {
           async function processOutline(items) {
             for (const item of items) {
               if (item.dest) {
-                const page = await pdfDoc.getPageIndex(item.dest[0]);
-                chapters.push({
-                  id: id++,
-                  title: item.title,
-                  page: page + 1
-                });
+                try {
+                  const ref = item.dest[0];
+                  const page = await pdfDoc.getPageIndex(ref);
+                  chapters.push({
+                    id: id++,
+                    title: item.title || 'Chapter ' + id,
+                    page: page + 1
+                  });
+                } catch (e) {
+                  console.error('Error processing outline item:', e);
+                }
               }
-              if (item.items) {
+              if (item.items && item.items.length > 0) {
                 await processOutline(item.items);
               }
             }
           }
 
           await processOutline(outline);
+          
+          // Sắp xếp chapters theo số trang
+          chapters.sort((a, b) => a.page - b.page);
+          
           window.ReactNativeWebView.postMessage('CHAPTERS_DATA:' + JSON.stringify(chapters));
         } catch (error) {
+          console.error('Error extracting chapters:', error);
           window.ReactNativeWebView.postMessage('CHAPTERS_ERROR:' + error.message);
         }
       })();
@@ -1622,10 +1719,15 @@ export default function PdfViewer() {
   };
 
 
-  // Add this to useEffect where PDF is loaded
+  // Cập nhật useEffect để đảm bảo chapters được extract sau khi PDF load xong
   useEffect(() => {
-    if (pdfLoadedRef.current) {
-      extractChapters();
+    if (pdfLoadedRef.current && !loadedChapters.current) {
+      console.log('PDF loaded, extracting chapters...');
+      loadedChapters.current = true;
+      // Đợi 1 giây để đảm bảo PDF đã hoàn tất khởi tạo
+      setTimeout(() => {
+        extractChapters();
+      }, 1000);
     }
   }, [pdfLoadedRef.current]);
 
@@ -1780,8 +1882,9 @@ export default function PdfViewer() {
               <FlatList
                 data={chapters}
                 renderItem={({ item }) => {
-                  // Check if current page is within this chapter's range
-                  const isCurrentChapter = currentPage === item.page;
+                  // So sánh với currentChapter để xác định chapter hiện tại
+                  const isCurrentChapter = currentChapter && currentChapter.id === item.id;
+                  
                   return (
                     <TouchableOpacity 
                       style={[styles.chapterItem, isCurrentChapter && styles.currentChapterItem]}

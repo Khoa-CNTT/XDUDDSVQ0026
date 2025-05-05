@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, SafeAreaView, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RenderBookItem from "../components/Home/RenderBookItem";
@@ -19,116 +19,265 @@ export default function SavedScreen() {
     saved: 0,
     favorites: 0
   });
+  
+  // Refs for managing lifecycle and fetch requests
+  const isMountedRef = useRef(true);
+  const abortControllerRef = useRef(null);
+  const storageMonitorRef = useRef(null);
+  const isLoadingRef = useRef(false);
+  const apiDataLoadedRef = useRef(false);
+  
+  // Theo dõi ID sách đã lưu và yêu thích để biết khi nào chúng thay đổi
+  const savedIdsRef = useRef([]);
+  const favoriteIdsRef = useRef([]);
+
+  // Kết hợp tất cả sách có sẵn (API + local)
+  const allAvailableBooks = useMemo(() => {
+    // Tạo một map từ id đến sách để loại bỏ trùng lặp
+    const booksMap = new Map();
+    
+    // Thêm sách từ API
+    apiBooks.forEach(book => {
+      const id = book.id || book.book_id;
+      booksMap.set(id.toString(), book);
+    });
+    
+    // Thêm sách từ dữ liệu cục bộ nếu không trùng
+    const localBooks = [
+      ...booksData.featuredBooks,
+      ...booksData.bestSellers,
+      ...booksData.freeBooks
+    ];
+    
+    localBooks.forEach(book => {
+      const id = book.id || book.book_id;
+      if (!booksMap.has(id.toString())) {
+        booksMap.set(id.toString(), book);
+      }
+    });
+    
+    return Array.from(booksMap.values());
+  }, [apiBooks]);
 
   // Tải lại dữ liệu mỗi khi màn hình được focus
   useFocusEffect(
     React.useCallback(() => {
-      console.log('📚 Saved screen focused - reloading data...');
-      // Load ngay lập tức khi màn hình được focus
-      loadBooks();
+      console.log('📚 Saved screen focused');
+      isMountedRef.current = true;
+      
+      // Tạo AbortController mới để quản lý fetch requests
+      const controller = new AbortController();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = controller;
+      
+      // Làm mới dữ liệu khi tab được focus
+      const refreshDataOnFocus = async () => {
+        try {
+          // Chỉ hiển thị loading state nếu chưa có dữ liệu
+          if (savedBooks.length === 0 && favoriteBooks.length === 0) {
+            setIsLoading(true);
+          }
+          
+          // Đánh dấu đang tải để tránh nhiều request đồng thời
+          isLoadingRef.current = true;
+          
+          // Tải dữ liệu API nếu cần
+          if (!apiDataLoadedRef.current || apiBooks.length === 0) {
+            console.log('📚 Loading API data...');
+            await fetchBooksFromAPI(controller.signal);
+          }
+          
+          // Tải danh sách sách đã lưu và yêu thích
+          await Promise.all([
+            loadSavedBooks(),
+            loadFavoriteBooks()
+          ]);
+          
+          // Cập nhật timestamp
+          await AsyncStorage.setItem('saved_data_last_fetched', Date.now().toString());
+          
+          if (isMountedRef.current) {
+            setIsLoading(false);
+          }
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            console.log('📚 Data refresh was aborted');
+            return;
+          }
+          
+          console.error('📚 Error refreshing data on focus:', error);
+          if (isMountedRef.current) {
+            setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+            setIsLoading(false);
+          }
+        } finally {
+          isLoadingRef.current = false;
+        }
+      };
+      
+      refreshDataOnFocus();
+      
+      // Thiết lập theo dõi thay đổi storage
+      setupStorageMonitoring();
       
       return () => {
-        console.log('📚 Saved screen blurred');
+        console.log('📚 Saved screen blurred - cleaning up');
+        isMountedRef.current = false;
+        
+        if (storageMonitorRef.current) {
+          clearInterval(storageMonitorRef.current);
+          storageMonitorRef.current = null;
+        }
+        
+        // Hủy bỏ tất cả API fetch đang chạy
+        controller.abort();
       };
     }, [])
   );
 
-  // Lắng nghe thay đổi từ AsyncStorage cho danh sách sách đã lưu và yêu thích
-  useEffect(() => {
-    // console.log('📚 Setting up storage listeners');
+  // Thiết lập theo dõi thay đổi từ AsyncStorage
+  const setupStorageMonitoring = () => {
+    // Xóa interval cũ nếu có
+    if (storageMonitorRef.current) {
+      clearInterval(storageMonitorRef.current);
+    }
     
-    // Thiết lập event listener cho AsyncStorage
-    const setupStorageListeners = () => {
-      // Kiểm tra thay đổi thường xuyên hơn (1 giây)
-      const checkInterval = setInterval(async () => {
-        try {
-          // Kiểm tra danh sách sách đã lưu
-          const savedIdsStr = await AsyncStorage.getItem('savedBooks');
-          if (savedIdsStr) {
-            const savedIds = JSON.parse(savedIdsStr);
-            // Nếu số lượng sách đã lưu khác với trạng thái hiện tại, cập nhật
-            if (savedIds.length !== savedBooks.length) {
-              // console.log('📚 Detected change in saved books count, reloading...');
-              loadSavedBooks();
-            }
-          }
-
-          // Kiểm tra danh sách sách yêu thích
-          const favoriteIdsStr = await AsyncStorage.getItem('favoriteBooks');
-          if (favoriteIdsStr) {
-            const favoriteIds = JSON.parse(favoriteIdsStr);
-            // Nếu số lượng sách yêu thích khác với trạng thái hiện tại, cập nhật
-            if (favoriteIds.length !== favoriteBooks.length) {
-              // console.log('📚 Detected change in favorite books count, reloading...');
-              loadFavoriteBooks();
-            }
-          }
-
-          // Kiểm tra cờ cập nhật (cách cũ, duy trì tương thích ngược)
-          const savedUpdate = await AsyncStorage.getItem('saved_books_updated');
-          const favoriteUpdate = await AsyncStorage.getItem('favorite_books_updated');
-          
-          if (savedUpdate) {
-            // console.log('📚 Detected update flag for saved books, refreshing...');
-            await AsyncStorage.removeItem('saved_books_updated');
-            loadSavedBooks();
-          }
-          
-          if (favoriteUpdate) {
-            // console.log('📚 Detected update flag for favorite books, refreshing...');
-            await AsyncStorage.removeItem('favorite_books_updated');
-            loadFavoriteBooks();
-          }
-        } catch (error) {
-          console.error('Error checking for updates:', error);
+    // Kiểm tra thay đổi sách đã lưu/yêu thích mỗi 3 giây
+    storageMonitorRef.current = setInterval(async () => {
+      if (!isMountedRef.current) return;
+      
+      try {
+        // Kiểm tra thay đổi sách đã lưu
+        const savedIdsStr = await AsyncStorage.getItem('savedBooks');
+        const savedIds = savedIdsStr ? JSON.parse(savedIdsStr) : [];
+        
+        // So sánh IDs mới với IDs đã lưu trước đó
+        const savedIdsChanged = !arraysEqual(savedIds, savedIdsRef.current);
+        if (savedIdsChanged) {
+          console.log('📚 Saved books changed, reloading...');
+          savedIdsRef.current = savedIds;
+          loadSavedBooks();
         }
-      }, 1000); // Kiểm tra mỗi 1 giây
-      
-      return () => {
-        clearInterval(checkInterval);
-      };
-    };
-
-    const removeListener = setupStorageListeners();
-    
-    // Tải dữ liệu ngay lần đầu
-    if (apiBooks.length === 0) {
-      loadBooks();
-    }
-    
-    return () => {
-      // console.log('📚 Cleaning up storage listeners');
-      removeListener && removeListener();
-    };
-  }, [savedBooks.length, favoriteBooks.length]);
-
-  const loadBooks = async () => {
-    // console.log('📚 Loading books data...');
-    setIsLoading(true);
-    setError(null);
-    try {
-      // Tải dữ liệu sách từ API Laravel
-      await fetchBooksFromAPI();
-      
-      // Tải danh sách ID sách đã lưu và yêu thích
-      await Promise.all([
-        loadSavedBooks(),
-        loadFavoriteBooks()
-      ]);
-      
-      console.log('📚 All book data loaded successfully');
-    } catch (error) {
-      console.error('📚 Error loading books:', error);
-      setError('Không thể tải dữ liệu sách, vui lòng thử lại sau');
-    } finally {
-      setIsLoading(false);
-    }
+        
+        // Kiểm tra thay đổi sách yêu thích
+        const favoriteIdsStr = await AsyncStorage.getItem('favoriteBooks');
+        const favoriteIds = favoriteIdsStr ? JSON.parse(favoriteIdsStr) : [];
+        
+        // So sánh IDs mới với IDs đã lưu trước đó
+        const favoriteIdsChanged = !arraysEqual(favoriteIds, favoriteIdsRef.current);
+        if (favoriteIdsChanged) {
+          console.log('📚 Favorite books changed, reloading...');
+          favoriteIdsRef.current = favoriteIds;
+          loadFavoriteBooks();
+        }
+        
+        // Kiểm tra cờ cập nhật (cách cũ, duy trì tương thích ngược)
+        const savedUpdate = await AsyncStorage.getItem('saved_books_updated');
+        const favoriteUpdate = await AsyncStorage.getItem('favorite_books_updated');
+        
+        if (savedUpdate) {
+          console.log('📚 Found update flag for saved books');
+          await AsyncStorage.removeItem('saved_books_updated');
+          loadSavedBooks();
+        }
+        
+        if (favoriteUpdate) {
+          console.log('📚 Found update flag for favorite books');
+          await AsyncStorage.removeItem('favorite_books_updated');
+          loadFavoriteBooks();
+        }
+      } catch (error) {
+        console.error('📚 Error checking storage changes:', error);
+      }
+    }, 3000);
+  };
+  
+  // Hàm so sánh hai mảng
+  const arraysEqual = (a, b) => {
+    if (a.length !== b.length) return false;
+    const sortedA = [...a].sort();
+    const sortedB = [...b].sort();
+    return sortedA.every((val, idx) => val === sortedB[idx]);
   };
 
-  const fetchBooksFromAPI = async () => {
+  // Khởi tạo component
+  useEffect(() => {
+    console.log('📚 Saved screen mounted');
+    isMountedRef.current = true;
+    isLoadingRef.current = false;
+    apiDataLoadedRef.current = false;
+    
+    // Tải dữ liệu ban đầu
+    const initialLoad = async () => {
+      try {
+        setIsLoading(true);
+        isLoadingRef.current = true;
+        
+        // Tạo AbortController mới
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        
+        // Tải dữ liệu từ API
+        await fetchBooksFromAPI(controller.signal);
+        
+        if (isMountedRef.current) {
+          // Tải sách đã lưu và yêu thích
+          await Promise.all([
+            loadSavedBooks(),
+            loadFavoriteBooks()
+          ]);
+          
+          setIsLoading(false);
+        }
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          console.log('📚 Initial load aborted');
+          return;
+        }
+        
+        console.error('📚 Error during initial load:', error);
+        if (isMountedRef.current) {
+          setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+          setIsLoading(false);
+        }
+      } finally {
+        isLoadingRef.current = false;
+      }
+    };
+    
+    initialLoad();
+    
+    // Thiết lập theo dõi thay đổi từ AsyncStorage
+    setupStorageMonitoring();
+    
+    return () => {
+      console.log('📚 Saved screen unmounted');
+      isMountedRef.current = false;
+      
+      // Dọn dẹp tất cả các tác vụ đang chạy
+      if (storageMonitorRef.current) {
+        clearInterval(storageMonitorRef.current);
+        storageMonitorRef.current = null;
+      }
+      
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Tải dữ liệu sách từ API
+  const fetchBooksFromAPI = async (signal) => {
+    if (!isMountedRef.current) return [];
+    
     try {
-      console.log('📚 Fetching books from API:', `${API_URL}/books`);
-      const response = await fetch(`${API_URL}/books`);
+      console.log('📚 Fetching books from API');
+      const response = await fetch(`${API_URL}/books`, { signal });
+      
+      if (!isMountedRef.current) return [];
+      
       const data = await response.json();
       
       if (data.status && data.data) {
@@ -144,147 +293,319 @@ export default function SavedScreen() {
           description: book.description || "Mô tả sách sẽ hiển thị ở đây",
         }));
         
-        setApiBooks(books);
-        console.log(`📚 Đã tải ${books.length} cuốn sách từ API`);
-      } else {
-        console.warn("📚 API trả về dữ liệu không đúng cấu trúc");
+        if (isMountedRef.current) {
+          setApiBooks(books);
+          apiDataLoadedRef.current = true;
+          console.log(`📚 Loaded ${books.length} books from API`);
+        }
         
-        // Nếu API không hoạt động, sử dụng dữ liệu local
+        return books;
+      } else {
+        console.warn("📚 API returned invalid data structure");
+        
+        // Sử dụng dữ liệu local nếu API không hoạt động
         const localBooks = [
           ...booksData.featuredBooks,
           ...booksData.bestSellers,
           ...booksData.freeBooks
         ];
-        setApiBooks(localBooks);
+        
+        if (isMountedRef.current) {
+          setApiBooks(localBooks);
+          apiDataLoadedRef.current = true;
+        }
+        
+        return localBooks;
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('📚 API fetch was aborted');
+        return [];
+      }
+      
       console.error('📚 Error fetching books from API:', error);
       
-      // Nếu có lỗi khi gọi API, sử dụng dữ liệu local
+      // Sử dụng dữ liệu local nếu API có lỗi
       const localBooks = [
         ...booksData.featuredBooks,
         ...booksData.bestSellers,
         ...booksData.freeBooks
       ];
-      setApiBooks(localBooks);
+      
+      if (isMountedRef.current) {
+        setApiBooks(localBooks);
+        apiDataLoadedRef.current = true;
+      }
+      
+      return localBooks;
     }
   };
 
+  // Tìm sách dựa trên danh sách ID - được tối ưu hóa để xử lý nhiều loại ID
+  const findBooksByIds = (bookIds) => {
+    console.log(`📚 Finding books from ${allAvailableBooks.length} available books`);
+    
+    // Debug: In ra một vài ID sách đầu tiên để kiểm tra
+    if (allAvailableBooks.length > 0) {
+      const sampleBooks = allAvailableBooks.slice(0, 3);
+      console.log('📚 Sample book IDs:', sampleBooks.map(b => {
+        return {
+          id: b.id,
+          book_id: b.book_id,
+          title: b.title
+        };
+      }));
+    }
+    
+    // Debug: In ra danh sách ID cần tìm
+    console.log('📚 Looking for these IDs:', bookIds);
+    
+    const results = bookIds
+      .map(savedId => {
+        // Chuyển đổi ID thành string để đảm bảo so sánh chính xác
+        const savedIdStr = savedId.toString();
+        console.log(`📚 Searching for book with ID: ${savedIdStr}`);
+        
+        // Tìm sách với tất cả các định dạng ID có thể
+        const found = allAvailableBooks.find(book => {
+          // Lấy cả id và book_id để đảm bảo không bỏ sót
+          const bookId = book.id?.toString() || '';
+          const bookBookId = book.book_id?.toString() || '';
+          
+          // Danh sách các định dạng ID khác nhau cần kiểm tra
+          const possibleIds = [
+            bookId,
+            bookBookId,
+            bookId.startsWith('BOOK') ? bookId.replace('BOOK', '') : `BOOK${bookId}`,
+            bookBookId.startsWith('BOOK') ? bookBookId.replace('BOOK', '') : `BOOK${bookBookId}`
+          ].filter(Boolean); // Loại bỏ các giá trị falsy
+          
+          // Kiểm tra nếu ID đang tìm khớp với bất kỳ định dạng nào
+          for (const id of possibleIds) {
+            if (id === savedIdStr) return true;
+            if (savedIdStr.startsWith('BOOK') && savedIdStr.replace('BOOK', '') === id) return true;
+            if (!savedIdStr.startsWith('BOOK') && `BOOK${savedIdStr}` === id) return true;
+          }
+          
+          return false;
+        });
+        
+        if (found) {
+          console.log(`📚 Found book: ${found.title} (ID: ${found.id || found.book_id})`);
+          return found;
+        } else {
+          console.log(`📚 No book found for ID: ${savedIdStr}`);
+          
+          // Tìm kiếm mở rộng trong trường hợp không tìm thấy
+          const book = findFallbackBook(savedIdStr);
+          return book;
+        }
+      })
+      .filter(Boolean); // Loại bỏ các giá trị undefined
+    
+    console.log(`📚 Total books found: ${results.length} out of ${bookIds.length} IDs`);
+    return results;
+  };
+  
+  // Hàm tìm kiếm sách dự phòng với thuật toán khác nếu cách thông thường không hoạt động
+  const findFallbackBook = (searchId) => {
+    // Tìm kiếm theo số ID (bỏ qua bất kỳ tiền tố nào)
+    const numericId = searchId.replace(/\D/g, '');
+    if (!numericId) return null;
+    
+    console.log(`📚 Fallback search for numeric ID: ${numericId}`);
+    
+    for (const book of allAvailableBooks) {
+      const bookIdStr = (book.id || book.book_id || '').toString();
+      const bookNumericId = bookIdStr.replace(/\D/g, '');
+      
+      if (bookNumericId === numericId) {
+        console.log(`📚 Fallback found book: ${book.title}`);
+        return book;
+      }
+    }
+    
+    // Nếu chưa tìm thấy, thử một chiến lược khác: tìm theo một phần của ID
+    if (numericId.length > 3) {
+      for (const book of allAvailableBooks) {
+        const bookIdStr = (book.id || book.book_id || '').toString();
+        if (bookIdStr.includes(numericId) || numericId.includes(bookIdStr)) {
+          console.log(`📚 Partial match found book: ${book.title}`);
+          return book;
+        }
+      }
+    }
+    
+    return null;
+  };
+  
+  // Load and process saved books with proper error handling
   const loadSavedBooks = async () => {
+    if (!isMountedRef.current) return;
+    
     try {
-      // console.log('📚 Loading saved books...');
       const savedBookIds = await AsyncStorage.getItem('savedBooks');
+      
+      if (!isMountedRef.current) return;
+      
       if (!savedBookIds) {
         console.log('📚 No saved books found');
         setSavedBooks([]);
+        savedIdsRef.current = [];
         return;
       }
       
-      const bookIds = JSON.parse(savedBookIds);
-      // console.log('📚 Saved book IDs:', bookIds);
-      
-      // Đảm bảo apiBooks đã được tải
-      if (apiBooks.length === 0) {
-        console.log('📚 API books not loaded yet, fetching again...');
-        await fetchBooksFromAPI();
+      let bookIds;
+      try {
+        bookIds = JSON.parse(savedBookIds);
+        // Đảm bảo bookIds là một mảng
+        if (!Array.isArray(bookIds)) {
+          console.log('📚 Saved books data is not an array, resetting');
+          bookIds = [];
+        }
+      } catch (parseError) {
+        console.error('📚 Error parsing saved book IDs:', parseError);
+        bookIds = [];
       }
       
-      // Kết hợp sách từ API và local data
-      const allBooks = [
-        ...apiBooks,
-        ...booksData.featuredBooks,
-        ...booksData.bestSellers,
-        ...booksData.freeBooks
-      ];
+      // Kiểm tra nếu API đã tải xong
+      if (apiBooks.length === 0 && !apiDataLoadedRef.current) {
+        console.log('📚 API data not yet loaded, waiting before loading saved books');
+        // Tải lại API data nếu cần
+        if (!isLoadingRef.current) {
+          const controller = new AbortController();
+          try {
+            await fetchBooksFromAPI(controller.signal);
+          } catch (error) {
+            console.error('📚 Error fetching API data for saved books:', error);
+          }
+        }
+      }
       
-      // Tìm sách dựa trên ID, với xử lý đặc biệt cho ID có tiền tố "BOOK"
-      const savedBooksData = bookIds.map(savedId => {
-        // Log for debugging
-        // console.log(`📚 Looking for book with saved ID: ${savedId}`);
-        
-        return allBooks.find(book => {
-          const bookId = book.id || book.book_id;
-          
-          // Nhiều cách so sánh ID khác nhau
-          if (savedId === bookId) return true;
-          if (savedId.startsWith('BOOK') && savedId === bookId) return true;
-          if (savedId.startsWith('BOOK') && savedId.replace('BOOK', '') === bookId) return true;
-          if (!savedId.startsWith('BOOK') && `BOOK${savedId}` === bookId) return true;
-          
-          return false;
-        });
-      }).filter(Boolean); // Remove any undefined entries
+      console.log(`📚 Loading ${bookIds.length} saved books`);
+      savedIdsRef.current = bookIds;
       
-      // console.log(`📚 Tìm thấy ${savedBooksData.length} sách đã lưu`);
-      setSavedBooks(savedBooksData);
-      setLastUpdated(prev => ({...prev, saved: Date.now()}));
+      // Tìm sách từ danh sách ID
+      const savedBooksData = findBooksByIds(bookIds);
+      
+      if (isMountedRef.current) {
+        setSavedBooks(savedBooksData);
+        setLastUpdated(prev => ({...prev, saved: Date.now()}));
+        console.log(`📚 Loaded ${savedBooksData.length} saved books`);
+      }
     } catch (error) {
-      console.error('📚 Error loading saved books:', error);
-      setSavedBooks([]);
+      if (isMountedRef.current) {
+        console.error('📚 Error loading saved books:', error);
+        setSavedBooks([]);
+      }
     }
   };
 
+  // Load and process favorite books with proper error handling
   const loadFavoriteBooks = async () => {
+    if (!isMountedRef.current) return;
+    
     try {
-      console.log('📚 Loading favorite books...');
       const favoriteBookIds = await AsyncStorage.getItem('favoriteBooks');
+      
+      if (!isMountedRef.current) return;
+      
       if (!favoriteBookIds) {
         console.log('📚 No favorite books found');
         setFavoriteBooks([]);
+        favoriteIdsRef.current = [];
         return;
       }
       
-      const bookIds = JSON.parse(favoriteBookIds);
-      console.log('📚 Favorite book IDs:', bookIds);
-      
-      // Đảm bảo apiBooks đã được tải
-      if (apiBooks.length === 0) {
-        console.log('📚 API books not loaded yet, fetching again...');
-        await fetchBooksFromAPI();
+      let bookIds;
+      try {
+        bookIds = JSON.parse(favoriteBookIds);
+        // Đảm bảo bookIds là một mảng
+        if (!Array.isArray(bookIds)) {
+          console.log('📚 Favorite books data is not an array, resetting');
+          bookIds = [];
+        }
+      } catch (parseError) {
+        console.error('📚 Error parsing favorite book IDs:', parseError);
+        bookIds = [];
       }
       
-      // Kết hợp sách từ API và local data
-      const allBooks = [
-        ...apiBooks,
-        ...booksData.featuredBooks,
-        ...booksData.bestSellers,
-        ...booksData.freeBooks
-      ];
+      // Kiểm tra nếu API đã tải xong
+      if (apiBooks.length === 0 && !apiDataLoadedRef.current) {
+        console.log('📚 API data not yet loaded, waiting before loading favorite books');
+        // Tải lại API data nếu cần
+        if (!isLoadingRef.current) {
+          const controller = new AbortController();
+          try {
+            await fetchBooksFromAPI(controller.signal);
+          } catch (error) {
+            console.error('📚 Error fetching API data for favorite books:', error);
+          }
+        }
+      }
       
-      // Tìm sách dựa trên ID, với xử lý đặc biệt cho ID có tiền tố "BOOK"
-      const favoriteBooksData = bookIds.map(savedId => {
-        // Log for debugging
-        console.log(`📚 Looking for book with favorite ID: ${savedId}`);
-        
-        return allBooks.find(book => {
-          const bookId = book.id || book.book_id;
-          
-          // Nhiều cách so sánh ID khác nhau
-          if (savedId === bookId) return true;
-          if (savedId.startsWith('BOOK') && savedId === bookId) return true;
-          if (savedId.startsWith('BOOK') && savedId.replace('BOOK', '') === bookId) return true;
-          if (!savedId.startsWith('BOOK') && `BOOK${savedId}` === bookId) return true;
-          
-          return false;
-        });
-      }).filter(Boolean); // Remove any undefined entries
+      console.log(`📚 Loading ${bookIds.length} favorite books`);
+      favoriteIdsRef.current = bookIds;
       
-      console.log(`📚 Tìm thấy ${favoriteBooksData.length} sách yêu thích`);
-      setFavoriteBooks(favoriteBooksData);
-      setLastUpdated(prev => ({...prev, favorites: Date.now()}));
+      // Tìm sách từ danh sách ID
+      const favoriteBooksData = findBooksByIds(bookIds);
+      
+      if (isMountedRef.current) {
+        setFavoriteBooks(favoriteBooksData);
+        setLastUpdated(prev => ({...prev, favorites: Date.now()}));
+        console.log(`📚 Loaded ${favoriteBooksData.length} favorite books`);
+      }
     } catch (error) {
-      console.error('📚 Error loading favorite books:', error);
-      setFavoriteBooks([]);
+      if (isMountedRef.current) {
+        console.error('📚 Error loading favorite books:', error);
+        setFavoriteBooks([]);
+      }
     }
   };
 
+  // Làm mới dữ liệu theo yêu cầu người dùng
   const onRefresh = async () => {
+    if (isLoadingRef.current) return;
+    
     console.log('📚 Manual refresh triggered');
     setRefreshing(true);
-    await loadBooks();
-    setRefreshing(false);
+    isLoadingRef.current = true;
+    
+    try {
+      // Tạo AbortController mới
+      const controller = new AbortController();
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = controller;
+      
+      // Làm mới toàn bộ dữ liệu
+      await fetchBooksFromAPI(controller.signal);
+      
+      if (isMountedRef.current) {
+        await Promise.all([
+          loadSavedBooks(),
+          loadFavoriteBooks()
+        ]);
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('📚 Refresh was aborted');
+      } else {
+        console.error('📚 Error during manual refresh:', error);
+        if (isMountedRef.current) {
+          setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+        }
+      }
+    } finally {
+      isLoadingRef.current = false;
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    }
   };
 
+  // Component nút tab
   const TabButton = ({ title, isActive, onPress, icon }) => (
     <TouchableOpacity
       onPress={onPress}
@@ -308,6 +629,7 @@ export default function SavedScreen() {
     </TouchableOpacity>
   );
 
+  // Trạng thái trống
   const renderEmptyState = () => (
     <View className="flex-1 justify-center items-center py-8">
       <Ionicons 
@@ -327,6 +649,11 @@ export default function SavedScreen() {
       </Text>
     </View>
   );
+
+  // Chọn sách dựa trên tab đang hoạt động
+  const booksToDisplay = useMemo(() => {
+    return activeTab === 'saved' ? savedBooks : favoriteBooks;
+  }, [activeTab, savedBooks, favoriteBooks]);
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -367,9 +694,9 @@ export default function SavedScreen() {
         </View>
       ) : (
         <FlatList
-          data={(activeTab === 'saved' ? savedBooks : favoriteBooks).slice(0, 20)}
+          data={booksToDisplay.slice(0, 20)}
           renderItem={({ item }) => <RenderBookItem item={item} />}
-          keyExtractor={item => item.id}
+          keyExtractor={item => item.id?.toString() || Math.random().toString()}
           numColumns={2}
           contentContainerStyle={{ 
             paddingHorizontal: 16,
