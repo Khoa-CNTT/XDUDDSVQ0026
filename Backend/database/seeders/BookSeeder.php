@@ -3,60 +3,21 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use App\Models\Book;
 use App\Models\Author;
 use App\Models\Category;
+use Illuminate\Support\Facades\DB;
 
 class BookSeeder extends Seeder
 {
     /**
-     * Danh sách các chủ đề phổ biến ở Việt Nam để tìm kiếm
-     * Giảm xuống chỉ 5 chủ đề để có tổng 50 cuốn sách
-     */
-    protected $topics = [
-        'Văn học Việt Nam',
-        'Sách kinh doanh',
-        'Sách tâm lý học',
-        'Sách thiếu nhi',
-        'Tiểu thuyết trinh thám'
-    ];
-
-    // Số lượng sách tối đa muốn seed
-    protected $maxBooks = 50;
-
-    // Số lượng sách đã thêm
-    protected $bookCount = 0;
-
-    /**
-     * Danh sách tác giả Việt Nam phổ biến
-     */
-    protected $popularAuthors = [
-        'Nguyễn Nhật Ánh',
-        'Nguyễn Ngọc Tư',
-        'Nguyễn Phong Việt',
-        'Trang Hạ',
-        'Anh Khang',
-        'Nguyễn Ngọc Thạch',
-        'Nguyễn Quang Thiều',
-        'Nguyễn Đông Thức'
-    ];
-
-    /**
-     * Danh sách thể loại
+     * Categories to seed
      */
     protected $categories = [
-        'CAT000001' => 'Văn học Việt Nam',
-        'CAT000002' => 'Truyện ngắn',
-        'CAT000003' => 'Tiểu thuyết',
-        'CAT000004' => 'Kinh tế - Kinh doanh',
-        'CAT000005' => 'Tâm lý - Kỹ năng sống',
-        'CAT000006' => 'Thiếu nhi',
-        'CAT000007' => 'Học ngoại ngữ',
-        'CAT000008' => 'Trinh thám',
-        'CAT000009' => 'Khoa học - Công nghệ',
-        'CAT000010' => 'Lịch sử',
+        'CAT000001' => 'Hài Hước',
+        'CAT000002' => 'Phiêu lưu - Trinh thám',
+        'CAT000003' => 'Thể Thao',
     ];
 
     /**
@@ -64,8 +25,10 @@ class BookSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->command->info('Bắt đầu seed dữ liệu sách từ Google Books API...');
-        $this->command->info('Giới hạn tối đa ' . $this->maxBooks . ' cuốn sách');
+        $this->command->info('Bắt đầu seed dữ liệu sách...');
+
+        // Xóa dữ liệu cũ trước khi thêm mới
+        $this->truncateData();
 
         // Seed categories
         $this->seedCategories();
@@ -73,22 +36,26 @@ class BookSeeder extends Seeder
         // Seed authors
         $this->seedAuthors();
 
-        // Lấy sách từ Google Books API với mỗi chủ đề
-        foreach ($this->topics as $index => $topic) {
-            // Kiểm tra xem đã đủ số lượng sách tối đa chưa
-            if ($this->bookCount >= $this->maxBooks) {
-                $this->command->info("Đã đạt đến số lượng tối đa " . $this->maxBooks . " cuốn sách");
-                break;
-            }
+        // Seed books
+        $this->seedBooks();
 
-            $this->command->info("Đang lấy sách với chủ đề: {$topic}");
-            $this->fetchBooksForTopic($topic, $index);
-            
-            // Nghỉ một chút để tránh bị Google giới hạn yêu cầu
-            sleep(2);
-        }
+        $this->command->info('Hoàn thành seed dữ liệu sách!');
+    }
 
-        $this->command->info('Hoàn thành seed dữ liệu sách! Đã thêm ' . $this->bookCount . ' cuốn sách');
+    /**
+     * Truncate tables before seeding
+     */
+    protected function truncateData(): void
+    {
+        $this->command->info('Xóa dữ liệu cũ...');
+        
+        // Disable foreign key checks to allow truncating tables with relationships
+        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        
+        Book::truncate();
+        
+        // Re-enable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
     }
 
     /**
@@ -113,177 +80,214 @@ class BookSeeder extends Seeder
     {
         $this->command->info('Seeding authors...');
         
-        // Thêm một số tác giả mặc định
         $authors = [
-            [
-                'author_id' => 'AUTH000001',
-                'name_author' => 'Nguyễn Nhật Ánh',
-                'bio' => 'Nhà văn Việt Nam nổi tiếng với các tác phẩm về tuổi học trò và tuổi thơ.',
-                'nationality' => 'Việt Nam',
-                'birth_date' => '1955-05-07',
-            ],
-            [
-                'author_id' => 'AUTH000002',
-                'name_author' => 'Nguyễn Ngọc Tư',
-                'bio' => 'Nhà văn, nhà thơ người Việt Nam, nổi tiếng với nhiều tác phẩm về đời sống miền Tây Nam Bộ.',
-                'nationality' => 'Việt Nam',
-                'birth_date' => '1976-01-01',
-            ],
-            [
-                'author_id' => 'AUTH000003',
-                'name_author' => 'Rosie Nguyễn',
-                'bio' => 'Tác giả của nhiều cuốn sách về phát triển bản thân.',
-                'nationality' => 'Việt Nam',
-                'birth_date' => '1987-01-01',
-            ],
-            [
-                'author_id' => 'AUTH000004',
-                'name_author' => 'Trang Hạ',
-                'bio' => 'Nhà văn, nhà báo nổi tiếng với những tác phẩm về phụ nữ hiện đại.',
-                'nationality' => 'Việt Nam',
-                'birth_date' => '1975-01-01',
-            ],
-            [
-                'author_id' => 'AUTH000005',
-                'name_author' => 'Dale Carnegie',
-                'bio' => 'Tác giả nổi tiếng với các tác phẩm về phát triển bản thân và kỹ năng giao tiếp.',
-                'nationality' => 'Mỹ',
-                'birth_date' => '1888-11-24',
-                'death_date' => '1955-11-01',
-            ]
+            'Khuyết Danh',
+            'Barney Stinson',
+            'Song Hà',
+            'Vương Hồng Sển',
+            'Nhiều Tác Giả',
+            'Jules Verne',
+            'Phù Sinh',
+            'Dang Hoang Xa',
+            'Đặng Kim Ba',
+            'Đỗ Phú Phi',
+            'Đinh Hiệp',
+            'Luca Caioli',
         ];
-
-        foreach ($authors as $author) {
+        
+        foreach ($authors as $index => $name) {
+            $authorId = 'AUTH' . str_pad($index + 1, 6, '0', STR_PAD_LEFT);
             Author::updateOrCreate(
-                ['author_id' => $author['author_id']],
-                $author
+                ['author_id' => $authorId],
+                [
+                    'name_author' => $name,
+                    'bio' => 'Tác giả ' . $name,
+                    'nationality' => 'Việt Nam',
+                    'birth_date' => null,
+                ]
             );
         }
     }
 
     /**
-     * Fetch books from Google Books API for a specific topic
+     * Seed books directly
      */
-    protected function fetchBooksForTopic(string $topic, int $topicIndex): void
+    protected function seedBooks(): void
     {
-        // Phân bổ category ID dựa trên chủ đề
-        $categoryId = 'CAT' . str_pad(($topicIndex % 10) + 1, 6, '0', STR_PAD_LEFT);
+        $this->command->info('Seeding books...');
         
-        try {
-            // Tính toán số sách còn lại cần thêm để đạt đến tối đa
-            $booksNeeded = $this->maxBooks - $this->bookCount;
-            $maxResults = min(10, $booksNeeded);
+        $books = [
+            // Sách Hài Hước
+            [
+                'name_book' => 'Trạng Quỳnh',
+                'title' => 'Trạng Quỳnh là nhân vật dân gian nổi tiếng trong kho tàng truyện cười và truyện ngụ ngôn Việt Nam, nổi bật với sự thông minh, dí dỏm, thường dùng trí tuệ để chống lại cường quyền và bất công....',
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/41/trang-quynh.jpg',
+                'author' => 'Khuyết Danh',
+                'category' => 'Hài Hước',
+                'pages' => '54'
+            ],
+            [
+                'name_book' => 'Playbook - Cẩm Nang Cưa Gái Của Dân Chơi',
+                'title' => "'Playbook – Cẩm Nang Cưa Gái Của Dân Chơi' là một cuốn sách giải trí hài hước, nổi tiếng gắn liền với nhân vật Barney Stinson trong loạt phim truyền hình Mỹ 'How I Met Your Mother'. Cuốn sách được xây dựng như một cuốn cẩm nang tán tỉnh, hướng dẫn người đọc đặc biệt là nam giới cách tiếp cận và quyến rũ phụ nữ qua những chiêu trò, mánh khóe kỳ quặc, hài hước và phần lớn là phi thực tế....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/52/playbook-cam-nang-cua-gai-cua-dan-choi.jpg',
+                'author' => 'Barney Stinson',
+                'category' => 'Hài Hước',
+                'pages' => '111'
+            ],
+            [
+                'name_book' => 'Ký Sự Đòi Nợ',
+                'title' => "Mấy năm gần đây, cái tên Song Hà, chủ nhân blog Boy Gia's đã thực sự trở thành một hiện tượng của văn học online. Là tác giả của nhiều truyện dài, truyện ngắn và tạp văn từng nhận được hàng chục nghìn lượt like trên facebook, fanpage và blog, điều gì khiến Song Hà được yêu mến đến vậy? Đó chính là lối viết điêu luyện, với giọng điệu vừa tưng tửng vừa phóng khoáng nhưng cũng hết sức mộc mạc và chân thật của cây viết cá tính này. Văn phong Song Hà hấp dẫn và cuốn hút người đọc ngay từ những dòng đầu tiên bởi sự hài hước, dí dỏm, ngang tàng, nhưng ẩn sâu sau tiếng cười là vị mặn chát của nỗi buồn, nước mắt và sự ngậm ngùi....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/95/ky-su-doi-no.jpg',
+                'author' => 'Song Hà',
+                'category' => 'Hài Hước',
+                'pages' => '346'
+            ],
+            [
+                'name_book' => 'Chuyện Cười Cổ Nhân',
+                'title' => "'Chuyện Cười Cổ Nhân' là một tuyển tập truyện cười do học giả Vương Hồng Sển sưu tầm và biên soạn, phản ánh trí tuệ dân gian, tinh thần châm biếm, và óc hài hước sâu sắc của người xưa trong đời sống văn hóa Việt Nam....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/94/chuyen-cuoi-co-nhan.jpg',
+                'author' => 'Vương Hồng Sển',
+                'category' => 'Hài Hước',
+                'pages' => '383'
+            ],
             
-            // Nếu không cần thêm sách nữa, thoát khỏi hàm
-            if ($maxResults <= 0) {
-                return;
-            }
+            // Sách Phiêu lưu - Trinh thám
+            [
+                'name_book' => 'Biết Tất Tần Tật Chuyện Trong Thiên Hạ',
+                'title' => 'Đây là loại sách có tính chất bách khoa tri thức, tập hợp những câu chuyện thú vị từ xưa đến nay trong cuộc sống, trong mọi lĩnh vực văn hoá, khoa học, lịch sử. ở khắp năm châu bốn biển, mà trước hết là ở Trung Quốc và phương Đông...',
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/13/biet-tat-tan-tat-chuyen-trong-thien-ha.jpg',
+                'author' => 'Nhiều Tác Giả',
+                'category' => 'Phiêu lưu - Trinh thám',
+                'pages' => '353'
+            ],
+            [
+                'name_book' => 'Hai Vạn Dặm Dưới Đáy Biển',
+                'title' => 'Tác phẩm của nhà văn Jules Verne hấp dẫn bạn đọc mọi lứa tuổi, không chỉ bởi những yếu tố ly kỳ mà còn bởi tính nhân văn. Hai vạn dặm dưới biển là câu chuyện về cuộc hành trình bất đắc dĩ của nhà nghiên cứu biển Aronnax, giáo sư Viện bảo tàng Paris cùng người cộng sự Conseil và người thợ săn cá voi Ned Land sau khi đột nhiên bị rơi vào con tàu Nautilus kỳ lạ...',
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/41/hai-van-dam-duoi-day-bien.jpg',
+                'author' => 'Jules Verne',
+                'category' => 'Phiêu lưu - Trinh thám',
+                'pages' => '342'
+            ],
+            [
+                'name_book' => 'Kẻ Trộm Mộ',
+                'title' => 'Những ngôi mộ cổ ở sâu dưới lòng đất luôn là nơi ẩn chứa nhiều bí mật, nhiều cổ vật và nhiều cạm bẫy. Những kẻ trộm mộ không những trên thông thiên văn dưới tường địa lý mà cần phải có kỹ năng sống vô cùng cao siêu và ảo diệu, đôi khi cũng cần phải dựa vào cả vận may của mình. Nếu thiếu một trong số những thứ đó, dù chỉ là chút sơ sảy, kết cục nhận lại sẽ thật thê thảm....',
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/51/ke-trom-mo.jpg',
+                'author' => 'Phù Sinh',
+                'category' => 'Phiêu lưu - Trinh thám',
+                'pages' => '415'
+            ],
+            [
+                'name_book' => 'Cuộc Phiêu Lưu Kỳ Lạ Của Đoàn Barsac',
+                'title' => 'Trong một chuyến thám hiểm và lòng Châu Phi, đoàn thám hiểm với người đứng đầu là Barsac đã có chuyến du hành vào một thành phố bí ẩn giữa lòng sa mạc Sahara. Thành phố phát triển này là do một nhà khoa học thông minh nhưng đầy tham vọng đen tối xây nên. Sức tưởng tượng của Jules Verne kết hợp với kiến thức khoa học đã tôn vinh những thành tựu tuyệt diệu của con người, và cũng cho thấy những thành tựu ấy chỉ nở hoa và trường tồn khi phục vụ cho mục đích tốt đẹp.....',
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/44/cuoc-phieu-luu-ky-la-cua-doan-barsac.jpg',
+                'author' => 'Jules Verne',
+                'category' => 'Phiêu lưu - Trinh thám',
+                'pages' => '214'
+            ],
+            [
+                'name_book' => 'Bí Mật Đảo Lincoln',
+                'title' => "Sau khi các tiểu thuyết 'Những đứa con của thuyền trưởng Grant' (1868) và 'Hai vạn dặm dưới biển' (1870) ra đời, được bạn đọc gần xa nhiệt liệt tán thưởng, năm 1875, Jules Verne (1828 - 1905), nhà văn Pháp nổi tiếng, một trong những người sáng lập thể loại truyện khoa học viễn tưởng, đã cho xuất bản tiếp tiểu thuyết 'Bí mật đảo Lincoln'[1]. Trong cuốn tiểu thuyết mới này, tác giả đã tiếp tục phát triển cốt truyện sinh động và hấp dẫn của hai tiểu thuyết trên, vì vậy nó đã liên kết các tác phẩm ấy thành bộ tiểu thuyết ba tập duy nhất và nổi tiếng nhất của Jules Verne: 'Những đứa con của thuyền trưởng Grant', 'Hai vạn dặm dưới biển' và 'Bí mật đảo Lincoln'.....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/68/bi-mat-dao-lincoln.jpg',
+                'author' => 'Jules Verne',
+                'category' => 'Phiêu lưu - Trinh thám',
+                'pages' => '397'
+            ],
+            [
+                'name_book' => 'Câu Chuyện Do Thái',
+                'title' => "Tại sao Issrael ngày nay lại là một điểm 'nóng' tại Trung Đông và là tâm điểm chú ý của toàn thế giới, cả về những xung đột đầy bạo lực cũng như những thành tựu về kinh tế, văn hóa và con người đến ngạc nhiên như thế? Tuy rằng Israel hiện đại khởi nguồn từ một trong những nền móng xã hội và văn hóa lâu đời nhất trên trái đất, di sản cổ xưa của nó đã không giúp cho công cuộc xây dựng quốc gia Israel hiện đại dễ dàng hơn. Ngược lại, tôn giáo và chủ nghĩa duy vật, ngôn ngữ đa dạng, dân chúng với nhiều trình độ phát triển kinh tế, kinh nghiệm lịch sử khác nhau....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/57/cau-chuyen-do-thai-tap-1.jpg',
+                'author' => 'Dang Hoang Xa',
+                'category' => 'Phiêu lưu - Trinh thám',
+                'pages' => '287'
+            ],
             
-            // Lấy sách từ Google Books API với số lượng được điều chỉnh
-            $response = Http::get('https://www.googleapis.com/books/v1/volumes', [
-                'q' => $topic,
-                'langRestrict' => 'vi',
-                'maxResults' => $maxResults,
-                'orderBy' => 'relevance',
-                'printType' => 'books'
-            ]);
-
-            if ($response->successful() && isset($response['items'])) {
-                $books = $response['items'];
+            // Sách Thể Thao
+            [
+                'name_book' => 'Hướng Dẫn Toàn Tập Yoga',
+                'title' => "'Hướng Dẫn Toàn Tập Yoga' là một cuốn sách chuyên sâu và toàn diện dành cho những ai muốn bắt đầu luyện tập yoga một cách bài bản hoặc nâng cao kiến thức và kỹ thuật trong bộ môn này. Tùy từng ấn bản, sách có thể được biên soạn bởi các huấn luyện viên yoga chuyên nghiệp hoặc các tổ chức sức khỏe – thường kết hợp giữa lý thuyết, hình ảnh minh họa và hướng dẫn thực hành....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/46/huong-dan-toan-tap-yoga.jpg',
+                'author' => 'Đặng Kim Ba',
+                'category' => 'Thể Thao',
+                'pages' => '46'
+            ],
+            [
+                'name_book' => 'Cờ Vua Nhập Môn',
+                'title' => "Cuốn sách 'Nhập môn cờ vua dành cho học sinh tiểu học' của Đỗ Phú Phi biên soạn nhằm cung cấp cho các em học sinh tiểu học các kiến thức cơ bản để chơi bộ môn cờ Vua. Các bài học cờ Vua giúp phát triển nhiều khả năng trí tuệ của con người, rèn luyện trí nhớ, hình thành và hoàn thiện những cá tính mạnh mẽ như ý chí dành chiến thắng, tính quyết đoán, sự minh mẫn, kiên trì, dẻo dai, nhẫn nại, khéo léo, tập trung, tính kỷ luật trong tư duy, lòng cao thượng, danh dự, lòng dũng cảm, khả năng mạo hiểm... và cuối cùng là kỹ năng đọc sách. Nhà sư phạm Xô viết lỗi lạc V.Sukhomlinsky đã từng viết: 'Khó có thể hình dung quá trình hoàn thiện các khả năng trí óc và trí nhớ của trẻ nếu thiếu cờ. Cờ Vua cần phải đi vào cuộc sống ngay từ bậc tiểu học như một trong những nhân tố văn hóa trí tuệ'....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/62/co-vua-nhap-mon.jpg',
+                'author' => 'Đỗ Phú Phi',
+                'category' => 'Thể Thao',
+                'pages' => '97'
+            ],
+            [
+                'name_book' => 'Ánh Viên: From Zero To Hero',
+                'title' => "'Ánh Viên: From Zero To Hero' là một cuốn sách kể về hành trình vươn lên đầy cảm hứng của Nguyễn Thị Ánh Viên, một trong những nữ vận động viên bơi lội xuất sắc nhất của thể thao Việt Nam. Cuốn sách mang tính tiểu sử – động lực, ghi lại quá trình từ khi cô là một cô bé nông thôn đến khi trở thành 'kình ngư vàng' châu Á....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/50/anh-vien-from-zero-to-hero.jpg',
+                'author' => 'Đinh Hiệp',
+                'category' => 'Thể Thao',
+                'pages' => '142'
+            ],
+            [
+                'name_book' => 'Tập Thể Hình Theo Phương Pháp Max Ot',
+                'title' => 'Chào mừng các bạn đến với khóa huấn luyện trực tuyến Max-OT trong 12 tuần của AST Khoa học Thể thao. Trong vài tháng tới bạn sẽ trải nghiệm một phương pháp tập luyện hoàn toàn mới, mà sẽ đảm bảo những kết quả theo suốt cuộc đời bạn. Đây là một lĩnh vực rất thú vị và tôi đang rất mong muốn chia sẻ với các bạn....',
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/54/tap-the-hinh-theo-phuong-phap-max-ot.jpg',
+                'author' => 'Nhiều Tác Giả',
+                'category' => 'Thể Thao',
+                'pages' => '136'
+            ],
+            [
+                'name_book' => 'Ronaldo: Ám Ảnh Về Sự Hoàn Hảo',
+                'title' => 'Cầu thủ xuất sắc nhất thế giới của FIFA năm 2008, 2 lần đạt giải Quả bóng vàng châu Âu, chủ nhân của Chiếc giày vàng mùa giải 2010 - 2011 và trở thành cầu thủ đắt giá nhất trong lịch sử bóng đá thế giới khi chuyển từ Manchester United sang câu lạc bộ mới là Real Madrid với mức giá 80 triệu bảng, đó là bảng liệt kê những danh hiệu cá nhân của C. Ronaldo - một trong những ngôi sao sáng nhất của làng túc cầu thế giới hiện nay....',
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/88/c-ronaldo-am-anh-ve-su-hoan-hao.jpg',
+                'author' => 'Luca Caioli',
+                'category' => 'Thể Thao',
+                'pages' => '662'
+            ],
+            [
+                'name_book' => 'Messi: Từ \'El Pulga\' Đến Một Huyền Thoại',
+                'title' => "Messi: Từ 'El Pulga' Đến Một Huyền Thoại là cuốn sách kể về cuộc đời, sự nghiệp và hành trình vươn tới đỉnh cao bóng đá thế giới của Lionel Messi – người được mệnh danh là một trong những cầu thủ vĩ đại nhất mọi thời đại. Cuốn sách có tính tiểu sử truyền cảm hứng, tập trung vào quá trình vượt qua nghịch cảnh, nỗ lực không ngừng nghỉ, và những dấu mốc huy hoàng trong sự nghiệp của anh....",
+                'image' => 'https://thuviensachpdf.com/uploads/book/image/61/messi-tu-el-pulga-den-mot-huyen-thoai.jpg',
+                'author' => 'Luca Caioli',
+                'category' => 'Thể Thao',
+                'pages' => '813'
+            ],
+        ];
+        
+        $bookCount = 0;
                 
                 foreach ($books as $index => $book) {
-                    // Kiểm tra xem đã đạt đến giới hạn chưa
-                    if ($this->bookCount >= $this->maxBooks) {
-                        break;
-                    }
-                    
-                    $volumeInfo = $book['volumeInfo'] ?? null;
-                    
-                    if (!$volumeInfo) {
-                        continue;
-                    }
-
-                    // Tạo book_id ngẫu nhiên theo định dạng
-                    $bookId = 'BOOK' . Str::random(6);
-                    
-                    // Lấy tên tác giả từ API hoặc sử dụng tác giả mặc định
-                    $authorName = $volumeInfo['authors'][0] ?? $this->getRandomAuthor();
-                    $authorId = $this->getAuthorIdByName($authorName);
-                    
-                    // Đảm bảo mỗi sách có thumbnail
-                    $imageUrl = $volumeInfo['imageLinks']['thumbnail'] ?? null;
-                    if (!$imageUrl) {
-                        $imageUrl = 'https://via.placeholder.com/128x192?text=No+Image';
-                    }
-
-                    // Định dạng ngày tạo
-                    $publishedDate = $volumeInfo['publishedDate'] ?? date('Y-m-d');
-                    try {
-                        $publishedDate = substr($publishedDate, 0, 10);
-                        $date = new \DateTime($publishedDate);
-                        $formattedDate = $date->format('Y-m-d');
-                    } catch (\Exception $e) {
-                        $formattedDate = date('Y-m-d');
-                    }
-
-                    // Create book record
-                    Book::updateOrCreate(
-                        ['book_id' => $bookId],
-                        [
-                            'name_book' => $volumeInfo['title'] ?? 'Unknown Title',
-                            'title' => $volumeInfo['subtitle'] ?? $volumeInfo['title'] ?? 'Unknown Title',
-                            'image' => $imageUrl,
-                            'created_at' => $formattedDate,
+            $categoryId = match ($book['category']) {
+                'Hài Hước' => 'CAT000001',
+                'Phiêu lưu - Trinh thám' => 'CAT000002',
+                'Thể Thao' => 'CAT000003',
+                default => 'CAT000001'
+            };
+            
+            // Tìm author ID
+            $author = Author::where('name_author', trim($book['author']))->first();
+            $authorId = $author ? $author->author_id : 'AUTH000001';
+            
+            // Tạo book ID
+            $bookId = 'BOOK' . str_pad($index + 1, 6, '0', STR_PAD_LEFT);
+            
+            Book::create([
+                'book_id' => $bookId,
+                'name_book' => $book['name_book'],
+                'title' => $book['title'],
+                'image' => $book['image'],
+                'created_at' => now(),
                             'author_id' => $authorId,
                             'category_id' => $categoryId,
                             'price' => 0,
                             'is_free' => true,
-                            'file_path' => null, // No PDF path for sample data
-                            'updated_at' => now()
-                        ]
-                    );
-
-                    $this->bookCount++;
-                    $this->command->info("Added book " . $this->bookCount . "/" . $this->maxBooks . ": " . ($volumeInfo['title'] ?? 'Unknown Title'));
-                }
-            } else {
-                $this->command->error("Could not fetch data for topic: {$topic}");
-            }
-        } catch (\Exception $e) {
-            $this->command->error("Error: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Get a random author from the list
-     */
-    protected function getRandomAuthor(): string
-    {
-        return $this->popularAuthors[array_rand($this->popularAuthors)];
-    }
-
-    /**
-     * Get author ID by name, create if not exists
-     */
-    protected function getAuthorIdByName(string $name): string
-    {
-        // Kiểm tra xem tác giả đã có trong cơ sở dữ liệu chưa
-        $author = Author::where('name_author', $name)->first();
-        
-        if ($author) {
-            return $author->author_id;
+                'file_path' => null,
+                'updated_at' => now(),
+                'pages' => (int) $book['pages']
+            ]);
+            
+            $this->command->info("Added book: {$book['name_book']} ({$book['category']})");
+            $bookCount++;
         }
         
-        // Nếu tác giả chưa có, tạo mới
-        $authorId = 'AUTH' . Str::random(6);
-        Author::create([
-            'author_id' => $authorId,
-            'name_author' => $name,
-            'bio' => 'Thông tin về tác giả chưa cập nhật.',
-            'nationality' => 'Chưa xác định',
-            'birth_date' => null,
-        ]);
-        
-        return $authorId;
+        $this->command->info("Tổng cộng đã thêm $bookCount cuốn sách");
     }
 } 

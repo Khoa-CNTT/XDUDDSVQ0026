@@ -35,6 +35,9 @@ Route::get('/books/search', [BookController::class, 'timKiem']);
 Route::get('/books/category/{categoryId}', [BookController::class, 'theoTheLoai']);
 Route::get('/books/author/{authorId}', [BookController::class, 'theoTacGia']);
 Route::get('/books/{id}', [BookController::class, 'chiTiet']);
+Route::post('/books/{id}/save', [BookController::class, 'luuSach']);
+Route::post('/books/{id}/favorite', [BookController::class, 'yeuThichSach']);
+
 
 // Public Category routes
 Route::get('/categories', [CategoryController::class, 'danhSach']);

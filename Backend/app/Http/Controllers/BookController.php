@@ -47,6 +47,8 @@ class BookController extends Controller
         // Xử lý trường is_free
         if (isset($data['is_free']) && $data['is_free']) {
             $data['is_free'] = true;
+            $data['is_favorite'] = false;
+            $data['is_saved'] = false;
             $data['price'] = 0; // Đặt giá = 0 nếu sách miễn phí
         } else {
             $data['is_free'] = false;
@@ -87,6 +89,8 @@ class BookController extends Controller
             $data['price'] = 0; // Đặt giá = 0 nếu sách miễn phí
         } else if (isset($data['is_free'])) {
             $data['is_free'] = false;
+            $data['is_favorite'] = false;
+            $data['is_saved'] = false;
             // Đảm bảo price được cung cấp nếu sách có phí
             if (!isset($data['price']) || $data['price'] <= 0) {
                 return response()->json([
@@ -162,7 +166,13 @@ class BookController extends Controller
             'data' => $books
         ]);
     }
-    
+    public function luuSach(Request $request, $id)
+    {
+        $book = Book::find($id);
+        $book->is_saved = $request->input('is_saved');
+        $book->save();
+        return response()->json(['status' => true]);
+    }
     public function sachMienPhi()
     {
         $books = Book::where('is_free', true)
@@ -175,18 +185,17 @@ class BookController extends Controller
         ]);
     }
     
-    public function sachCoPhi()
-    {
-        $books = Book::where('is_free', false)
-                    ->with(['author', 'category'])
-                    ->get();
+    // public function sachCoPhi()
+    // {
+    //     $books = Book::where('is_free', false)
+    //                 ->with(['author', 'category'])
+    //                 ->get();
         
-        return response()->json([
-            'status' => true,
-            'data' => $books
-        ]);
-    }
-
+    //     return response()->json([
+    //         'status' => true,
+    //         'data' => $books
+    //     ]);
+    // }
     /**
      * Trích xuất ảnh bìa từ PDF
      */
@@ -281,5 +290,13 @@ class BookController extends Controller
                 'message' => 'Lỗi khi tải lên sách: ' . $e->getMessage()
             ]);
         }
+    }
+
+    public function yeuThichSach(Request $request, $id)
+    {
+        $book = Book::find($id);
+        $book->is_favorite = $request->input('is_favorite');
+        $book->save();
+        return response()->json(['status' => true]);
     }
 } 

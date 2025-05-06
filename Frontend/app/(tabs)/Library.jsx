@@ -10,8 +10,6 @@ import {
   Dimensions,
   ActivityIndicator,
   TextInput,
-  Modal,
-  RefreshControl,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,7 +19,6 @@ import { API_URL } from '../config';
 import * as FileSystem from 'expo-file-system';
 import RenderBookItem from "../components/Home/RenderBookItem"
 import SectionHeader from '../components/SectionHeader';
-import booksData from '../../assets/booksData';
 
 // Tính toán kích thước phù hợp
 const { width } = Dimensions.get("window");
@@ -48,12 +45,7 @@ export default function Library() {
   const [sortBy, setSortBy] = useState('recent'); // 'recent', 'name', 'size'
   const [sortDirection, setSortDirection] = useState('desc'); // 'asc' or 'desc'
   const [showSortOptions, setShowSortOptions] = useState(false);
-  const [showCreateShelf, setShowCreateShelf] = useState(false);
-  const [newShelfName, setNewShelfName] = useState('');
   const [bookshelves, setBookshelves] = useState([]);
-  const [savedBooks, setSavedBooks] = useState([]);
-  const [favoriteBooks, setFavoriteBooks] = useState([]);
-  const [refreshing, setRefreshing] = useState(false);
   const [apiBooks, setApiBooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -63,8 +55,6 @@ export default function Library() {
     loadReadingProgress();
     loadBookshelves();
     fetchBooksFromAPI();
-    loadSavedBooks();
-    loadFavoriteBooks();
   }, []);
   
   // Sử dụng useFocusEffect để tải lại dữ liệu mỗi khi màn hình được focus
@@ -158,69 +148,6 @@ export default function Library() {
     }
   };
   
-  // Lưu giá sách vào AsyncStorage
-  const saveBookshelves = async (shelves) => {
-    try {
-      await AsyncStorage.setItem('bookshelves', JSON.stringify(shelves));
-    } catch (error) {
-      console.error('Error saving bookshelves:', error);
-    }
-  };
-  
-  // Thêm sách vào giá sách
-  const addToBookshelf = async (pdfId, shelfId) => {
-    const updatedShelves = bookshelves.map(shelf => {
-      if (shelf.id === shelfId) {
-        // Kiểm tra nếu sách đã tồn tại trong kệ
-        if (!shelf.books.includes(pdfId)) {
-          return {
-            ...shelf,
-            books: [...shelf.books, pdfId]
-          };
-        }
-      }
-      return shelf;
-    });
-    
-    setBookshelves(updatedShelves);
-    await saveBookshelves(updatedShelves);
-  };
-  
-  // Xóa sách khỏi giá sách
-  const removeFromBookshelf = async (pdfId, shelfId) => {
-    const updatedShelves = bookshelves.map(shelf => {
-      if (shelf.id === shelfId) {
-        return {
-          ...shelf,
-          books: shelf.books.filter(id => id !== pdfId)
-        };
-      }
-      return shelf;
-    });
-    
-    setBookshelves(updatedShelves);
-    await saveBookshelves(updatedShelves);
-  };
-  
-  // Tạo giá sách mới
-  const createNewShelf = async () => {
-    if (!newShelfName.trim()) return;
-    
-    const newShelf = {
-      id: 'shelf_' + Date.now(),
-      name: newShelfName.trim(),
-      icon: 'bookmarks',
-      color: '#ff9800', // Màu mặc định
-      books: []
-    };
-    
-    const updatedShelves = [...bookshelves, newShelf];
-    setBookshelves(updatedShelves);
-    await saveBookshelves(updatedShelves);
-    setNewShelfName('');
-    setShowCreateShelf(false);
-  };
-
   // Thay đổi cách sắp xếp
   const toggleSortOption = (option) => {
     if (sortBy === option) {
@@ -530,41 +457,6 @@ export default function Library() {
     );
   };
   
-  // Render kệ sách item
-  const renderBookshelfItem = ({ item }) => {
-    const booksInShelf = bookshelves.find(s => s.id === item.id)?.books || [];
-    
-    return (
-      <TouchableOpacity
-        className="flex-row items-center py-3 border-b border-gray-100"
-        onPress={() => {
-          // Navigation to bookshelf detail view would go here
-        }}
-      >
-        {/* Icon */}
-        <View 
-          className="w-12 h-12 rounded-full items-center justify-center mr-4"
-          style={{ backgroundColor: `${item.color}20` }}
-        >
-          <Ionicons name={item.icon} size={24} color={item.color} />
-        </View>
-        
-        {/* Title and info */}
-        <View className="flex-1">
-          <Text className="text-base font-medium">{item.name}</Text>
-          <Text className="text-sm text-gray-500 mt-1">
-            {booksInShelf.length} sách
-          </Text>
-        </View>
-        
-        {/* More options */}
-        <TouchableOpacity className="p-2">
-          <Ionicons name="chevron-forward" size={18} color="#666" />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    );
-  };
-  
   // Tiêu đề phần
   const SectionTitle = ({ title, onAction, actionText }) => (
     <View className="flex-row justify-between items-center mb-4">
@@ -626,131 +518,23 @@ export default function Library() {
         setApiBooks(books);
       } else {
         console.warn("API trả về dữ liệu không đúng cấu trúc");
-        
-        // Sử dụng dữ liệu local nếu API không hoạt động
-        const localBooks = [
-          ...booksData.featuredBooks,
-          ...booksData.bestSellers,
-          ...booksData.freeBooks
-        ];
-        setApiBooks(localBooks);
+        setApiBooks([]);
+        setError("Không thể tải dữ liệu từ máy chủ");
       }
     } catch (error) {
       console.error('Error fetching books:', error);
       setError("Lỗi khi tải dữ liệu sách");
-      
-      // Sử dụng dữ liệu local nếu API không hoạt động
-      const localBooks = [
-        ...booksData.featuredBooks,
-        ...booksData.bestSellers,
-        ...booksData.freeBooks
-      ];
-      setApiBooks(localBooks);
+      setApiBooks([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadSavedBooks = async () => {
-    try {
-      const savedBookIds = await AsyncStorage.getItem('savedBooks');
-      if (savedBookIds) {
-        const bookIds = JSON.parse(savedBookIds);
-        
-        // Kết hợp sách từ API và sách local
-        const allBooks = [
-          ...apiBooks,
-          ...booksData.featuredBooks,
-          ...booksData.bestSellers,
-          ...booksData.freeBooks
-        ];
-        
-        // Tìm sách dựa trên ID hoặc book_id
-        const savedBooksData = allBooks.filter(book => {
-          const bookId = book.id || book.book_id;
-          return bookIds.some(id => id === bookId || 
-            // Kiểm tra thêm trường hợp ID với tiền tố BOOK
-            (bookId && bookId.startsWith('BOOK') && id === bookId) || 
-            (id && id.startsWith('BOOK') && id === bookId));
-        });
-        
-        setSavedBooks(savedBooksData);
-      } else {
-        setSavedBooks([]);
-      }
-    } catch (error) {
-      console.error('Error loading saved books:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách sách đã lưu');
-    }
-  };
-
-  const loadFavoriteBooks = async () => {
-    try {
-      const favoriteBookIds = await AsyncStorage.getItem('favoriteBooks');
-      if (favoriteBookIds) {
-        const bookIds = JSON.parse(favoriteBookIds);
-        
-        // Kết hợp sách từ API và sách local
-        const allBooks = [
-          ...apiBooks,
-          ...booksData.featuredBooks,
-          ...booksData.bestSellers,
-          ...booksData.freeBooks
-        ];
-        
-        // Tìm sách dựa trên ID hoặc book_id
-        const favoriteBooksData = allBooks.filter(book => {
-          const bookId = book.id || book.book_id;
-          return bookIds.some(id => id === bookId || 
-            // Kiểm tra thêm trường hợp ID với tiền tố BOOK
-            (bookId && bookId.startsWith('BOOK') && id === bookId) || 
-            (id && id.startsWith('BOOK') && id === bookId));
-        });
-        
-        setFavoriteBooks(favoriteBooksData);
-      } else {
-        setFavoriteBooks([]);
-      }
-    } catch (error) {
-      console.error('Error loading favorite books:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách sách yêu thích');
-    }
-  };
-
   const onRefresh = async () => {
-    setRefreshing(true);
+    setIsLoading(true);
     await fetchBooksFromAPI();
-    await loadSavedBooks();
-    await loadFavoriteBooks();
-    setRefreshing(false);
+    setIsLoading(false);
   };
-
-  const renderSection = ({ section }) => {
-    return (
-      <View key={section.id}>
-        <SectionHeader title={section.title} />
-        {section.data.length > 0 ? (
-          <FlatList
-            data={section.data}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => <RenderBookItem item={item} />}
-            keyExtractor={(item) => item.id || item.book_id}
-            contentContainerStyle={{ paddingLeft: SPACING, paddingRight: SPACING * 2 }}
-          />
-        ) : (
-          <View className="px-4 py-8 items-center">
-            <Text className="text-gray-500">Chưa có sách nào trong danh mục này</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const sections = [
-    { id: 'saved', title: 'Đã Lưu', data: savedBooks },
-    { id: 'favorites', title: 'Yêu Thích', data: favoriteBooks },
-  ];
 
   if (isLoading) {
     return (
@@ -933,7 +717,6 @@ export default function Library() {
                 <TouchableOpacity 
                   className="mt-4 items-center py-3 bg-gray-50 rounded-lg border border-gray-200"
                   onPress={() => {
-                    // TODO: Navigate to full list view
                     router.push('/AllDocuments');
                   }}
                 >

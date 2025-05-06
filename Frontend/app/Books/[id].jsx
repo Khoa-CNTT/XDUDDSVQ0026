@@ -3,7 +3,6 @@ import { View, Text, Image, ScrollView, TouchableOpacity, SafeAreaView, Alert, S
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import booksData from '../../assets/booksData';
 import { API_URL } from '../config';
 
 export default function BookDetailScreen() {
@@ -16,11 +15,8 @@ export default function BookDetailScreen() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Fetch book data from API or use local data
+    // Chỉ cần tải dữ liệu sách từ API, các trạng thái lưu/thích sẽ được lấy từ API
     fetchBookData();
-    // Check if book is saved or favorited
-    checkSavedStatus();
-    checkFavoriteStatus();
   }, [id]);
 
   const fetchBookData = async () => {
@@ -38,17 +34,24 @@ export default function BookDetailScreen() {
         const apiBook = data.data;
         setBook({
           id: apiBook.book_id,
-          title: apiBook.name_book || apiBook.title,
-          author: apiBook.author ? apiBook.author.name_author : 'Unknown Author',
+          title: apiBook.name_book,
+          description: apiBook.title, // Trong dữ liệu seed, title chứa mô tả sách
           image: typeof apiBook.image === 'string' ? { uri: apiBook.image } : require('../../assets/images/bia1.png'),
-          file_path: apiBook.file_path,
+          author: apiBook.author ? apiBook.author.name_author : 'Unknown Author',
           price: apiBook.is_free ? 'Miễn phí' : `${apiBook.price} ₫`,
           genre: apiBook.category ? apiBook.category.name_category : 'Chưa phân loại',
-          description: apiBook.description || 'Đây là một cuốn sách tuyệt vời với nội dung phong phú và hấp dẫn.',
-          pages: apiBook.pages || '256',
+          pages: apiBook.pages || '0',
           publisher: apiBook.publisher || 'NXB Trẻ',
-          year: apiBook.year || '2023'
+          year: apiBook.year || '2023',
+          file_path: apiBook.file_path,
+          // Lưu trạng thái từ server
+          is_saved: apiBook.is_saved,
+          is_favorite: apiBook.is_favorite,
         });
+        
+        // Cập nhật trạng thái dựa trên dữ liệu từ server
+        if (apiBook.is_saved) setIsSaved(apiBook.is_saved === 1);
+        if (apiBook.is_favorite) setIsFavorite(apiBook.is_favorite === 1);
       } else {
         // Nếu API không trả về dữ liệu hoặc lỗi, sử dụng dữ liệu local
         console.log('Book not found in API, falling back to local data');
@@ -91,88 +94,90 @@ export default function BookDetailScreen() {
     }
   };
 
-  const checkSavedStatus = async () => {
-    try {
-      const savedBooks = await AsyncStorage.getItem('savedBooks');
-      if (savedBooks) {
-        const parsedBooks = JSON.parse(savedBooks);
-        // Kiểm tra cả id và book_id để đảm bảo hoạt động với nhiều loại dữ liệu
-        setIsSaved(parsedBooks.some(bookId => bookId === id || bookId === `BOOK${id}`));
-      }
-    } catch (error) {
-      console.error('Error checking saved status:', error);
-    }
-  };
-
-  const checkFavoriteStatus = async () => {
-    try {
-      const favoriteBooks = await AsyncStorage.getItem('favoriteBooks');
-      if (favoriteBooks) {
-        const parsedBooks = JSON.parse(favoriteBooks);
-        // Kiểm tra cả id và book_id để đảm bảo hoạt động với nhiều loại dữ liệu
-        setIsFavorite(parsedBooks.some(bookId => bookId === id || bookId === `BOOK${id}`));
-      }
-    } catch (error) {
-      console.error('Error checking favorite status:', error);
-    }
-  };
-
   const handleSaveBook = async () => {
     try {
-      // Cần đảm bảo sử dụng đúng ID cho lưu trữ
+      // Lấy ID sách từ book hoặc params
       const bookIdToSave = book.id || id;
       
-      const savedBooks = await AsyncStorage.getItem('savedBooks');
-      let savedBooksArray = savedBooks ? JSON.parse(savedBooks) : [];
+      // Cập nhật trạng thái UI ngay lập tức (optimistic update)
+      const newSavedStatus = !isSaved;
+      setIsSaved(newSavedStatus);
       
-      if (isSaved) {
-        // Remove book from saved list - xóa cả hai dạng ID có thể có
-        savedBooksArray = savedBooksArray.filter(bookId => 
-          bookId !== bookIdToSave && bookId !== id && bookId !== `BOOK${id.replace('BOOK', '')}`);
-        showToast('Đã xóa khỏi danh sách đã lưu');
-      } else {
-        // Add book to saved list
-        savedBooksArray.push(bookIdToSave);
+      // Hiển thị thông báo phù hợp
+      if (newSavedStatus) {
         showToast('Đã lưu sách thành công');
+      } else {
+        showToast('Đã xóa khỏi danh sách đã lưu');
       }
       
-      await AsyncStorage.setItem('savedBooks', JSON.stringify(savedBooksArray));
-      setIsSaved(!isSaved);
+      // Gửi request API để cập nhật trạng thái trên server
+      console.log(`Updating save status for book ${bookIdToSave} to ${newSavedStatus}`);
       
-      // Cập nhật trạng thái global để refresh danh sách sách đã lưu
-      await AsyncStorage.setItem('saved_books_updated', Date.now().toString());
+      const response = await fetch(`${API_URL}/books/${bookIdToSave}/save`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_saved: newSavedStatus }),
+      });
+      
+      const result = await response.json();
+      console.log('Server response for save status:', result);
+      
+      if (!result.status) {
+        // Nếu API thất bại, khôi phục trạng thái UI
+        console.error('Failed to update save status on server:', result.message);
+        setIsSaved(!newSavedStatus);
+        showToast('Không thể cập nhật, vui lòng thử lại sau');
+      }
     } catch (error) {
       console.error('Error saving book:', error);
+      // Khôi phục trạng thái UI nếu có lỗi
+      setIsSaved(!isSaved);
       showToast('Có lỗi xảy ra, vui lòng thử lại');
     }
   };
 
   const handleFavoriteBook = async () => {
     try {
-      // Cần đảm bảo sử dụng đúng ID cho lưu trữ
+      // Lấy ID sách từ book hoặc params
       const bookIdToSave = book.id || id;
       
-      const favoriteBooks = await AsyncStorage.getItem('favoriteBooks');
-      let favoriteBooksArray = favoriteBooks ? JSON.parse(favoriteBooks) : [];
+      // Cập nhật trạng thái UI ngay lập tức (optimistic update)
+      const newFavoriteStatus = !isFavorite;
+      setIsFavorite(newFavoriteStatus);
       
-      if (isFavorite) {
-        // Remove book from favorites - xóa cả hai dạng ID có thể có
-        favoriteBooksArray = favoriteBooksArray.filter(bookId => 
-          bookId !== bookIdToSave && bookId !== id && bookId !== `BOOK${id.replace('BOOK', '')}`);
-        showToast('Đã xóa khỏi danh sách yêu thích');
-      } else {
-        // Add book to favorites
-        favoriteBooksArray.push(bookIdToSave);
+      // Hiển thị thông báo phù hợp
+      if (newFavoriteStatus) {
         showToast('Đã thêm vào danh sách yêu thích');
+      } else {
+        showToast('Đã xóa khỏi danh sách yêu thích');
       }
       
-      await AsyncStorage.setItem('favoriteBooks', JSON.stringify(favoriteBooksArray));
-      setIsFavorite(!isFavorite);
+      // Gửi request API để cập nhật trạng thái trên server
+      console.log(`Updating favorite status for book ${bookIdToSave} to ${newFavoriteStatus}`);
       
-      // Cập nhật trạng thái global để refresh danh sách yêu thích
-      await AsyncStorage.setItem('favorite_books_updated', Date.now().toString());
+      const response = await fetch(`${API_URL}/books/${bookIdToSave}/favorite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_favorite: newFavoriteStatus }),
+      });
+      
+      const result = await response.json();
+      console.log('Server response for favorite status:', result);
+      
+      if (!result.status) {
+        // Nếu API thất bại, khôi phục trạng thái UI
+        console.error('Failed to update favorite status on server:', result.message);
+        setIsFavorite(!newFavoriteStatus);
+        showToast('Không thể cập nhật, vui lòng thử lại sau');
+      }
     } catch (error) {
       console.error('Error updating favorites:', error);
+      // Khôi phục trạng thái UI nếu có lỗi
+      setIsFavorite(!isFavorite);
       showToast('Có lỗi xảy ra, vui lòng thử lại');
     }
   };
@@ -272,7 +277,7 @@ export default function BookDetailScreen() {
         }}
       />
      
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+     <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         <View className="items-center pt-6 pb-8 shadow-lg">
           <Image
             source={book.image}
@@ -323,39 +328,50 @@ export default function BookDetailScreen() {
             <Text className="text-xl font-bold mb-2" >Giới thiệu sách</Text>
             <Text className="text-lg font-bold text-blue-500 mb-2">{book.title}</Text>
             <Text className="text-base leading-6" >
-              {book.description || 'Đây là một cuốn sách tuyệt vời với nội dung phong phú và hấp dẫn. Tác giả đã mang đến cho người đọc một góc nhìn độc đáo về cuộc sống và con người.'}
+              {book.description}
             </Text>
           </View>
          
           <View className="p-4 rounded-xl mb-6" >
             <Text className="text-lg font-bold mb-2" >Thông tin</Text>
             <View className="flex-row justify-between py-2 border-b" >
-              <Text >Thể loại</Text>
-              <Text className="font-semibold">{book.genre || 'Tiểu thuyết'}</Text>
+              <Text>Thể loại</Text>
+              <Text className="font-semibold">{book.genre}</Text>
             </View>
             <View className="flex-row justify-between py-2 border-b" >
-              <Text >Số trang</Text>
-              <Text className="font-semibold">{book.pages || '256'}</Text>
+              <Text>Số trang</Text>
+              <Text className="font-semibold">{book.pages}</Text>
             </View>
             <View className="flex-row justify-between py-2 border-b" >
-              <Text >Nhà xuất bản</Text>
-              <Text className="font-semibold">{book.publisher || 'NXB Trẻ'}</Text>
+              <Text>Nhà xuất bản</Text>
+              <Text className="font-semibold">{book.publisher}</Text>
             </View>
             <View className="flex-row justify-between py-2">
-              <Text >Năm xuất bản</Text>
-              <Text className="font-semibold">{book.year || '2023'}</Text>
+              <Text>Năm xuất bản</Text>
+              <Text className="font-semibold">{book.year}</Text>
             </View>
           </View>
         </View>
       </ScrollView>
       <View className="p-6 bottom-0 w-full left-0 right-0 bg-gray-100 flex-row justify-between items-center py-4">
-        <Text className="text-black font-extrabold text-center text-xl ms-6">{book.price || "Miễn phí"}</Text>
-        <TouchableOpacity 
-          className="bg-blue-500 rounded-md p-3 w-32"
-          onPress={handleReadBook}
-        >
-          <Text className="text-white font-extrabold text-center text-xl">Đọc Ngay</Text>
-        </TouchableOpacity>
+        <Text className="text-black font-extrabold text-center text-xl ms-6">{book.price}</Text>
+        <View className="flex-row">
+          <TouchableOpacity 
+            className="bg-gray-500 rounded-md p-3 mr-2"
+            onPress={async () => {
+              const cleared = await clearCachedFile(id);
+              showToast(cleared ? 'Đã xóa bộ nhớ đệm!' : 'Không có bộ nhớ đệm!');
+            }}
+          >
+            {/* <Text className="text-white font-bold text-center">Xóa Cache</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            className="bg-blue-500 rounded-md p-3 w-32"
+            onPress={handleReadBook}
+          > */}
+            <Text className="text-white font-extrabold text-center text-xl">Đọc Ngay</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
