@@ -1,7 +1,7 @@
 import { View, Text, SafeAreaView, Image, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native'
 import React, { useState, useEffect } from 'react'
 import { Stack } from 'expo-router'
-import { Feather, FontAwesome } from '@expo/vector-icons';
+import { Feather, FontAwesome,MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import authService from '../services/authService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -78,22 +78,28 @@ export default function Profile() {
                 <Text className="text-black mt-4 text-3xl font-semibold">{userName}</Text>
             </View>
             <View className="mt-6 bg-gray-50">
-                <TouchableOpacity 
-                    className="flex-row items-center px-5 py-5 gap-x-6"
+                <TouchableOpacity className="flex-row items-center px-5 gap-x-6 pt-5"
+                    onPress={() => router.push('../screen/Charity')}
+                >
+                    <MaterialCommunityIcons name="charity" size={22} color="#000000" />
+                    <Text className="text-2xl font-light text-black">Quyên Góp / Ủng Hộ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                    className="flex-row items-center px-5 pt-5 gap-x-6"
                     onPress={handleLogout}
                     disabled={loading}
                 >
                     {loading ? (
                         <ActivityIndicator size="small" color="#0891b2" />
                     ) : (
-                        <Feather name="log-out" size={22} color="#0891b2" />
+                        <Feather name="log-out" size={22} color="#000000" />
                     )}
                     <Text className="text-2xl font-light text-black">Đăng Xuất</Text>
                 </TouchableOpacity>
-                <TouchableOpacity className="flex-row items-center px-5 pb-5 gap-x-6"
+                <TouchableOpacity className="flex-row items-center px-5 py-5 gap-x-6"
                     onPress={() => router.push('../(auth)/ChangePassword')}
                 >
-                    <FontAwesome name="exchange" size={22} color="#0891b2" />
+                    <FontAwesome name="exchange" size={22} color="#000000" />
                     <Text className="text-2xl font-light text-black">Đổi Mật Khẩu</Text>
                 </TouchableOpacity>
             </View>

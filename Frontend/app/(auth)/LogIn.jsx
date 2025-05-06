@@ -213,9 +213,9 @@ export default function LogIn() {
               autoCapitalize="none"
             />
             <Text className="text-gray-700 ml-4">Mật Khẩu</Text>
-            <View className="flex-row rounded-2xl items-center mb-4">
+            <View className="flex-row rounded-2xl items-center mb-4 bg-gray-100">
               <TextInput
-                className="flex-1 p-4 bg-gray-100 text-gray-700 rounded-2xl"
+                className="flex-1 p-4 text-gray-700 rounded-2xl"
                 placeholder="Nhập Mật Khẩu"
                 secureTextEntry={isSecureTextEntry}
                 value={password}
