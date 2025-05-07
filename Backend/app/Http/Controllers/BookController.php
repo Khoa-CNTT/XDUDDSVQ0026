@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Book;
 use App\Models\Author;
 use App\Models\Category;
+use App\Models\UserBookPreference;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class BookController extends Controller
 {
@@ -20,7 +22,7 @@ class BookController extends Controller
         ]);
     }
     
-    public function chiTiet($id)
+    public function chiTiet($id, Request $request)
     {
         $book = Book::with(['author', 'category', 'chapters'])->find($id);
         
@@ -31,9 +33,33 @@ class BookController extends Controller
             ]);
         }
         
+        // Lấy trạng thái cá nhân hóa nếu có token
+        $is_saved = false;
+        $is_favorite = false;
+        $user = null;
+        if ($request->bearerToken()) {
+            $tokenModel = PersonalAccessToken::findToken($request->bearerToken());
+            if ($tokenModel && $tokenModel->tokenable) {
+                $user = $tokenModel->tokenable;
+                $preference = UserBookPreference::where('user_id', $user->user_id)
+                    ->where('book_id', $book->book_id)
+                    ->first();
+                if ($preference) {
+                    $is_saved = $preference->is_saved;
+                    $is_favorite = $preference->is_favorite;
+                }
+            }
+        }
+        
         return response()->json([
             'status' => true,
-            'data' => $book
+            'data' => array_merge(
+                $book->toArray(),
+                [
+                    'is_saved' => $is_saved,
+                    'is_favorite' => $is_favorite
+                ]
+            )
         ]);
     }
     
@@ -132,8 +158,18 @@ class BookController extends Controller
     {
         $query = $request->query('q');
         
+        if (empty($query)) {
+            return response()->json([
+                'status' => true,
+                'data' => []
+            ]);
+        }
+        
         $books = Book::where('name_book', 'like', "%{$query}%")
                     ->orWhere('title', 'like', "%{$query}%")
+                    ->orWhereHas('author', function($q) use ($query) {
+                        $q->where('name_author', 'like', "%{$query}%");
+                    })
                     ->with(['author', 'category'])
                     ->get();
         
@@ -166,13 +202,58 @@ class BookController extends Controller
             'data' => $books
         ]);
     }
+
+    private function getUserFromRequest($request)
+    {
+        $token = $request->bearerToken();
+        if (!$token) return null;
+        $tokenModel = PersonalAccessToken::findToken($token);
+        return $tokenModel ? $tokenModel->tokenable : null;
+    }
+
     public function luuSach(Request $request, $id)
     {
-        $book = Book::find($id);
-        $book->is_saved = $request->input('is_saved');
-        $book->save();
-        return response()->json(['status' => true]);
+        try {
+            $user = $this->getUserFromRequest($request);
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthorized'
+                ], 401);
+            }
+
+            $book = Book::find($id);
+            if (!$book) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Không tìm thấy sách!'
+                ], 404);
+            }
+
+            // Tìm hoặc tạo mới preference
+            $preference = UserBookPreference::firstOrNew([
+                'user_id' => $user->user_id,
+                'book_id' => $book->book_id
+            ]);
+
+            // Cập nhật trạng thái lưu
+            $preference->is_saved = $request->input('is_saved', true);
+            $preference->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => $preference->is_saved ? 'Đã lưu sách thành công' : 'Đã xóa sách khỏi danh sách đã lưu',
+                'data' => $preference
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error in luuSach: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
     }
+
     public function sachMienPhi()
     {
         $books = Book::where('is_free', true)
@@ -183,6 +264,59 @@ class BookController extends Controller
             'status' => true,
             'data' => $books
         ]);
+    }
+    
+    /**
+     * Lấy danh sách sách xu hướng (sách được tìm kiếm nhiều nhất)
+     */
+    public function xuHuong()
+    {
+        try {
+            // Lấy các ID sách được yêu thích nhiều nhất
+            $popularBookIds = UserBookPreference::where('is_favorite', true)
+                ->select('book_id')
+                ->groupBy('book_id')
+                ->orderByRaw('COUNT(*) DESC')
+                ->limit(5)
+                ->pluck('book_id')
+                ->toArray();
+            
+            // Lấy thông tin đầy đủ của những sách này
+            $favoriteBooks = Book::whereIn('book_id', $popularBookIds)
+                ->with(['author', 'category'])
+                ->get();
+                
+            // Lấy ID sách đã có để loại trừ
+            $excludeIds = $favoriteBooks->pluck('book_id')->toArray();
+            
+            // Số lượng sách cần bổ sung ngẫu nhiên
+            $randomCount = 5 - count($favoriteBooks);
+            
+            // Lấy thêm sách ngẫu nhiên nếu cần
+            $randomBooks = collect([]);
+            if ($randomCount > 0) {
+                $randomBooks = Book::whereNotIn('book_id', $excludeIds)
+                    ->inRandomOrder()
+                    ->limit($randomCount)
+                    ->with(['author', 'category'])
+                    ->get();
+            }
+            
+            // Kết hợp kết quả
+            $trendingBooks = $favoriteBooks->merge($randomBooks);
+            
+            return response()->json([
+                'status' => true,
+                'data' => $trendingBooks
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Lỗi khi lấy sách xu hướng: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Có lỗi xảy ra khi lấy sách xu hướng',
+                'error' => $e->getMessage()
+            ]);
+        }
     }
     
     // public function sachCoPhi()
@@ -294,9 +428,80 @@ class BookController extends Controller
 
     public function yeuThichSach(Request $request, $id)
     {
-        $book = Book::find($id);
-        $book->is_favorite = $request->input('is_favorite');
-        $book->save();
-        return response()->json(['status' => true]);
+        try {
+            $user = $this->getUserFromRequest($request);
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthorized'
+                ], 401);
+            }
+
+            $book = Book::find($id);
+            if (!$book) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Không tìm thấy sách!'
+                ], 404);
+            }
+
+            $preference = UserBookPreference::firstOrNew([
+                'user_id' => $user->user_id,
+                'book_id' => $book->book_id
+            ]);
+
+            $preference->is_favorite = $request->input('is_favorite', true);
+            $preference->save();
+
+            return response()->json([
+                'status' => true,
+                'message' => $preference->is_favorite ? 'Đã thêm vào danh sách yêu thích' : 'Đã xóa khỏi danh sách yêu thích',
+                'data' => $preference
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error in yeuThichSach: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getUserBooks(Request $request)
+    {
+        try {
+            $user = $this->getUserFromRequest($request);
+            if (!$user) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Unauthorized'
+                ], 401);
+            }
+            $userId = $user->user_id;
+
+            $savedBooks = Book::whereHas('preferences', function($query) use ($userId) {
+                $query->where('is_saved', true)
+                      ->where('user_id', $userId);
+            })->with(['author', 'category'])->get();
+
+            $favoriteBooks = Book::whereHas('preferences', function($query) use ($userId) {
+                $query->where('is_favorite', true)
+                      ->where('user_id', $userId);
+            })->with(['author', 'category'])->get();
+
+            return response()->json([
+                'status' => true,
+                'data' => [
+                    'saved_books' => $savedBooks,
+                    'favorite_books' => $favoriteBooks
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error in getUserBooks: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
     }
 } 

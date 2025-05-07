@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "expo-file-system": "^18.1.9",
+    "expo-secure-store": "^14.2.3"
+  }
+}

@@ -26,8 +26,6 @@ class Book extends Model
         'category_id',
         'price',
         'is_free',
-        'is_favorite',
-        'is_saved',
         'pages',
         'file_path',
         'updated_at'
@@ -38,8 +36,6 @@ class Book extends Model
         'updated_at' => 'datetime',
         'price' => 'decimal:2',
         'is_free' => 'boolean',
-        'is_favorite' => 'integer',
-        'is_saved' => 'integer',
         'pages' => 'integer',
     ];
 
@@ -61,5 +57,14 @@ class Book extends Model
     public function reviews()
     {
         return $this->hasMany(Review::class, 'book_id', 'book_id');
+    }
+    public function userBookPreferences()
+    {
+        return $this->hasMany(UserBookPreference::class, 'book_id', 'book_id');
+    }
+
+    public function preferences()
+    {
+        return $this->hasMany(UserBookPreference::class, 'book_id', 'book_id');
     }
 } 

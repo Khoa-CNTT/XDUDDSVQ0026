@@ -21,8 +21,6 @@ return new class extends Migration
             $table->string('category_id', 10);
             $table->decimal('price', 10, 2);
             $table->boolean('is_free')->default(false);
-            $table->integer('is_favorite')->default(0);
-            $table->integer('is_saved')->default(0);
             $table->timestamp('updated_at')->nullable();
             
             $table->foreign('author_id')->references('author_id')->on('authors');
