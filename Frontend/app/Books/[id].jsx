@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, SafeAreaView, Alert, Share, ToastAndroid, Platform, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
+import { authService } from '../services/authService';
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -13,31 +14,58 @@ export default function BookDetailScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [error, setError] = useState(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     // Chỉ cần tải dữ liệu sách từ API, các trạng thái lưu/thích sẽ được lấy từ API
     fetchBookData();
   }, [id]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      
+      const fetchData = async () => {
+        if (isActive) {
+          await fetchBookData();
+        }
+      };
+      
+      fetchData();
+      
+      return () => {
+        isActive = false;
+      };
+    }, [id])
+  );
+
   const fetchBookData = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Trước tiên, thử fetch từ API
-      console.log('Fetching book from API:', `${API_URL}/books/${id}`);
-      const response = await fetch(`${API_URL}/books/${id}`);
+      const token = await AsyncStorage.getItem('token');
+      const response = await fetch(`${API_URL}/books/${id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await response.json();
       
       if (data.status && data.data) {
-        // Chuyển đổi dữ liệu từ API sang định dạng phù hợp
         const apiBook = data.data;
+        // Thêm log để debug
+        console.log('API Response:', {
+          is_saved: apiBook.is_saved,
+          is_favorite: apiBook.is_favorite
+        });
+        
         setBook({
           id: apiBook.book_id,
           title: apiBook.name_book,
           description: apiBook.title, // Trong dữ liệu seed, title chứa mô tả sách
           image: typeof apiBook.image === 'string' ? { uri: apiBook.image } : require('../../assets/images/bia1.png'),
-          author: apiBook.author ? apiBook.author.name_author : 'Unknown Author',
+          author: apiBook.author ? apiBook.author.name_author : 'Không rõ tác giả',
           price: apiBook.is_free ? 'Miễn phí' : `${apiBook.price} ₫`,
           genre: apiBook.category ? apiBook.category.name_category : 'Chưa phân loại',
           pages: apiBook.pages || '0',
@@ -49,9 +77,9 @@ export default function BookDetailScreen() {
           is_favorite: apiBook.is_favorite,
         });
         
-        // Cập nhật trạng thái dựa trên dữ liệu từ server
-        if (apiBook.is_saved) setIsSaved(apiBook.is_saved === 1);
-        if (apiBook.is_favorite) setIsFavorite(apiBook.is_favorite === 1);
+        // Cập nhật state trực tiếp từ API response
+        setIsSaved(!!apiBook.is_saved);
+        setIsFavorite(!!apiBook.is_favorite);
       } else {
         // Nếu API không trả về dữ liệu hoặc lỗi, sử dụng dữ liệu local
         console.log('Book not found in API, falling back to local data');
@@ -95,90 +123,82 @@ export default function BookDetailScreen() {
   };
 
   const handleSaveBook = async () => {
+    setIsUpdating(true);
     try {
-      // Lấy ID sách từ book hoặc params
-      const bookIdToSave = book.id || id;
-      
-      // Cập nhật trạng thái UI ngay lập tức (optimistic update)
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        showToast('Vui lòng đăng nhập để lưu sách');
+        return;
+      }
+
       const newSavedStatus = !isSaved;
+      // Cập nhật UI ngay lập tức
       setIsSaved(newSavedStatus);
       
-      // Hiển thị thông báo phù hợp
-      if (newSavedStatus) {
-        showToast('Đã lưu sách thành công');
-      } else {
-        showToast('Đã xóa khỏi danh sách đã lưu');
-      }
-      
-      // Gửi request API để cập nhật trạng thái trên server
-      console.log(`Updating save status for book ${bookIdToSave} to ${newSavedStatus}`);
-      
-      const response = await fetch(`${API_URL}/books/${bookIdToSave}/save`, {
+      const response = await fetch(`${API_URL}/books/${id}/save`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ is_saved: newSavedStatus }),
+        body: JSON.stringify({ 
+          is_saved: newSavedStatus
+        }),
       });
       
       const result = await response.json();
-      console.log('Server response for save status:', result);
-      
       if (!result.status) {
-        // Nếu API thất bại, khôi phục trạng thái UI
-        console.error('Failed to update save status on server:', result.message);
+        // Nếu API call thất bại, revert state
         setIsSaved(!newSavedStatus);
-        showToast('Không thể cập nhật, vui lòng thử lại sau');
+        showToast(result.message || 'Không thể cập nhật, vui lòng thử lại sau');
+      } else {
+        showToast(result.message);
+        // Sau khi API thành công, fetch lại dữ liệu mới nhất
+        await fetchBookData();
       }
     } catch (error) {
       console.error('Error saving book:', error);
-      // Khôi phục trạng thái UI nếu có lỗi
       setIsSaved(!isSaved);
-      showToast('Có lỗi xảy ra, vui lòng thử lại');
+      showToast('Có lỗi xảy ra, vui lòng thử lại sau');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
   const handleFavoriteBook = async () => {
     try {
-      // Lấy ID sách từ book hoặc params
-      const bookIdToSave = book.id || id;
-      
-      // Cập nhật trạng thái UI ngay lập tức (optimistic update)
-      const newFavoriteStatus = !isFavorite;
-      setIsFavorite(newFavoriteStatus);
-      
-      // Hiển thị thông báo phù hợp
-      if (newFavoriteStatus) {
-        showToast('Đã thêm vào danh sách yêu thích');
-      } else {
-        showToast('Đã xóa khỏi danh sách yêu thích');
-      }
-      
-      // Gửi request API để cập nhật trạng thái trên server
-      console.log(`Updating favorite status for book ${bookIdToSave} to ${newFavoriteStatus}`);
-      
-      const response = await fetch(`${API_URL}/books/${bookIdToSave}/favorite`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ is_favorite: newFavoriteStatus }),
-      });
-      
-      const result = await response.json();
-      console.log('Server response for favorite status:', result);
-      
-      if (!result.status) {
-        // Nếu API thất bại, khôi phục trạng thái UI
-        console.error('Failed to update favorite status on server:', result.message);
-        setIsFavorite(!newFavoriteStatus);
-        showToast('Không thể cập nhật, vui lòng thử lại sau');
-      }
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+            showToast('Vui lòng đăng nhập để thêm vào yêu thích');
+            return;
+        }
+        const newFavoriteStatus = !isFavorite;
+        setIsFavorite(newFavoriteStatus);
+        const response = await fetch(`${API_URL}/books/${id}/favorite`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ 
+                is_favorite: newFavoriteStatus
+            }),
+        });
+        const result = await response.json();
+        if (!result.status) {
+            setIsFavorite(!newFavoriteStatus); // Revert state if failed
+            showToast(result.message || 'Không thể cập nhật, vui lòng thử lại sau');
+        } else {
+            showToast(result.message);
+            setBook(prevBook => ({
+                ...prevBook,
+                is_favorite: newFavoriteStatus
+            }));
+        }
     } catch (error) {
-      console.error('Error updating favorites:', error);
-      // Khôi phục trạng thái UI nếu có lỗi
-      setIsFavorite(!isFavorite);
-      showToast('Có lỗi xảy ra, vui lòng thử lại');
+        console.error('Error favoriting book:', error);
+        setIsFavorite(!isFavorite); // Revert state on error
+        showToast('Có lỗi xảy ra, vui lòng thử lại sau');
     }
   };
 
@@ -294,12 +314,17 @@ export default function BookDetailScreen() {
               <TouchableOpacity 
                 className="items-center mx-4 w-20"
                 onPress={handleSaveBook}
+                disabled={isUpdating}
               >
-                <Ionicons 
-                  name={isSaved ? "bookmark" : "bookmark-outline"} 
-                  size={30} 
-                  color={isSaved ? "#3b82f6" : "#000"} 
-                />
+                {isUpdating ? (
+                  <ActivityIndicator size="small" color="#3b82f6" />
+                ) : (
+                  <Ionicons 
+                    name={isSaved ? "bookmark" : "bookmark-outline"} 
+                    size={30} 
+                    color={isSaved ? "#3b82f6" : "#000"} 
+                  />
+                )}
                 <Text className="text-sm mt-1">Lưu</Text>
               </TouchableOpacity>
 

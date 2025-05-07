@@ -10,11 +10,11 @@ import {
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import RenderBookItem from "../components/Home/RenderBookItem";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../config";
 import { useFocusEffect } from "expo-router";
-
+import { authService } from "../services/authService";
+import RenderBookItem from "../components/BookStore/RenderBookItem";
 export default function SavedScreen() {
   const [activeTab, setActiveTab] = useState("saved");
   const [savedBooks, setSavedBooks] = useState([]);
@@ -23,6 +23,7 @@ export default function SavedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [apiBooks, setApiBooks] = useState([]);
   const [error, setError] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [lastUpdated, setLastUpdated] = useState({
     saved: 0,
     favorites: 0,
@@ -39,86 +40,34 @@ export default function SavedScreen() {
   const savedIdsRef = useRef([]);
   const favoriteIdsRef = useRef([]);
 
-  // Hàm xóa tất cả dữ liệu 
-  const clearAllStorageData = async () => {
-    try {
-      Alert.alert(
-        "Xóa tất cả dữ liệu đã lưu",
-        "Bạn có chắc chắn muốn xóa tất cả sách đã lưu và yêu thích không?",
-        [
-          {
-            text: "Hủy",
-            style: "cancel",
-          },
-          {
-            text: "Xóa",
-            onPress: async () => {
-              try {
-                // Hiển thị trạng thái loading
-                setIsLoading(true);
-                
-                // Cập nhật trạng thái lưu/thích cho tất cả sách đã lưu
-                await Promise.all(
-                  savedBooks.map(async (book) => {
-                    try {
-                      await fetch(`${API_URL}/books/${book.id}/save`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ is_saved: false }),
-                      });
-                    } catch (error) {
-                      console.error(`Error unsaving book ${book.id}:`, error);
-                    }
-                  })
-                );
-                
-                // Cập nhật trạng thái lưu/thích cho tất cả sách đã thích
-                await Promise.all(
-                  favoriteBooks.map(async (book) => {
-                    try {
-                      await fetch(`${API_URL}/books/${book.id}/favorite`, {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ is_favorite: false }),
-                      });
-                    } catch (error) {
-                      console.error(`Error unfavoriting book ${book.id}:`, error);
-                    }
-                  })
-                );
-                
-                // Cập nhật UI tạm thời để phản hồi nhanh
-                setSavedBooks([]);
-                setFavoriteBooks([]);
-                
-                // Làm mới dữ liệu từ API
-                const controller = new AbortController();
-                await fetchBooksFromAPI(controller.signal);
-                
-                // Tắt trạng thái loading
-                setIsLoading(false);
-                
-                // Thông báo thành công
-                Alert.alert("Thành công", "Đã xóa tất cả sách đã lưu và yêu thích!");
-              } catch (error) {
-                console.error("Lỗi khi xóa dữ liệu:", error);
-                setIsLoading(false);
-                Alert.alert("Lỗi", "Không thể xóa dữ liệu. Vui lòng thử lại.");
-              }
-            },
-            style: "destructive",
-          },
-        ]
-      );
-    } catch (error) {
-      console.error("Lỗi:", error);
-      Alert.alert("Lỗi", "Không thể xóa dữ liệu. Vui lòng thử lại.");
-    }
-  };
+  // Lấy user ID khi component khởi tạo
+  useEffect(() => {
+    const getUserId = async () => {
+      try {
+        const userEmail = await AsyncStorage.getItem('user_email');
+        const userIdValue = await AsyncStorage.getItem('user_id');
+        
+        if (userIdValue) {
+          console.log("📚 Using user ID:", userIdValue);
+          setUserId(userIdValue);
+        } else if (userEmail) {
+          // Fallback to email if necessary
+          console.log("📚 No user ID, using email as identifier:", userEmail);
+          setUserId(userEmail);
+        } else {
+          console.warn("📚 No user ID or email found");
+          setUserId("guest");
+        }
+      } catch (error) {
+        console.error("📚 Error getting user ID:", error);
+        setUserId("guest");
+      }
+    };
+    
+    getUserId();
+  }, []);
+
+  
 
   // Thiết lập theo dõi thay đổi - chỉ cần làm mới dữ liệu từ API định kỳ
   const setupStorageMonitoring = () => {
@@ -129,11 +78,11 @@ export default function SavedScreen() {
 
     // Kiểm tra thay đổi sách đã lưu/yêu thích mỗi 10 giây
     storageMonitorRef.current = setInterval(async () => {
-      if (!isMountedRef.current || isLoadingRef.current) return;
+      if (!isMountedRef.current || isLoadingRef.current || !userId) return;
 
       try {
         // Làm mới dữ liệu từ API - không cần loadSavedBooks/loadFavoriteBooks
-        console.log("📚 Refreshing data from API (periodic check)");
+        // console.log("📚 Refreshing data from API (periodic check)");
         const controller = new AbortController();
         await fetchBooksFromAPI(controller.signal);
       } catch (error) {
@@ -157,44 +106,46 @@ export default function SavedScreen() {
     isLoadingRef.current = false;
     apiDataLoadedRef.current = false;
 
-    // Tải dữ liệu ban đầu
-    const initialLoad = async () => {
-      try {
-        setIsLoading(true);
-        isLoadingRef.current = true;
+    // Tải dữ liệu ban đầu khi đã có userId
+    if (userId) {
+      const initialLoad = async () => {
+        try {
+          setIsLoading(true);
+          isLoadingRef.current = true;
 
-        // Tạo AbortController mới
-        const controller = new AbortController();
-        abortControllerRef.current = controller;
+          // Tạo AbortController mới
+          const controller = new AbortController();
+          abortControllerRef.current = controller;
 
-        // Tải dữ liệu từ API - tất cả state được cập nhật trong hàm này
-        console.log("📚 Initial API data load");
-        await fetchBooksFromAPI(controller.signal);
+          // Tải dữ liệu từ API - tất cả state được cập nhật trong hàm này
+          console.log("📚 Initial API data load");
+          await fetchBooksFromAPI(controller.signal);
 
-        // Cập nhật trạng thái loading
-        if (isMountedRef.current) {
-          setIsLoading(false);
+          // Cập nhật trạng thái loading
+          if (isMountedRef.current) {
+            setIsLoading(false);
+          }
+        } catch (error) {
+          if (error.name === "AbortError") {
+            console.log("📚 Initial load aborted");
+            return;
+          }
+
+          console.error("📚 Error during initial load:", error);
+          if (isMountedRef.current) {
+            setError("Không thể tải dữ liệu, vui lòng thử lại sau");
+            setIsLoading(false);
+          }
+        } finally {
+          isLoadingRef.current = false;
         }
-      } catch (error) {
-        if (error.name === "AbortError") {
-          console.log("📚 Initial load aborted");
-          return;
-        }
+      };
 
-        console.error("📚 Error during initial load:", error);
-        if (isMountedRef.current) {
-          setError("Không thể tải dữ liệu, vui lòng thử lại sau");
-          setIsLoading(false);
-        }
-      } finally {
-        isLoadingRef.current = false;
-      }
-    };
+      initialLoad();
 
-    initialLoad();
-
-    // Thiết lập theo dõi thay đổi
-    setupStorageMonitoring();
+      // Thiết lập theo dõi thay đổi
+      setupStorageMonitoring();
+    }
 
     return () => {
       console.log("📚 Saved screen unmounted");
@@ -210,92 +161,75 @@ export default function SavedScreen() {
         abortControllerRef.current.abort();
       }
     };
-  }, []);
+  }, [userId]);
 
   // Tải dữ liệu sách từ API
   const fetchBooksFromAPI = async (signal) => {
-    if (!isMountedRef.current) return [];
-
     try {
-      console.log("📚 Fetching books from API");
-      const response = await fetch(`${API_URL}/books`, { signal });
-
-      if (!isMountedRef.current) return [];
-
-      if (!response.ok) {
-        throw new Error(`API responded with status ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.status && data.data && Array.isArray(data.data)) {
-        const books = data.data.map((book) => ({
-          id: book.book_id,
-          title: book.name_book,
-          author: book.author ? book.author.name_author : "Unknown Author",
-          image: book.image,
-          file_path: book.file_path,
-          price: book.is_free ? "Miễn phí" : `${book.price} ₫`,
-          rating: Math.floor(Math.random() * 5) + 1,
-          category_id: book.category_id,
-          description: book.description || "Mô tả sách sẽ hiển thị ở đây",
-          is_saved: book.is_saved,
-          is_favorite: book.is_favorite,
-        }));
-
-        if (isMountedRef.current) {
-          // Cập nhật state
-          setApiBooks(books);
-          apiDataLoadedRef.current = true;
-          console.log(`📚 Loaded ${books.length} books from API`);
-          
-          // Lọc sách đã lưu và yêu thích trực tiếp từ dữ liệu mới
-          const savedBooksFromApi = books.filter(book => 
-            book.is_saved === true || book.is_saved === 1
-          );
-          
-          const favoriteBooksFromApi = books.filter(book => 
-            book.is_favorite === true || book.is_favorite === 1
-          );
-          
-          // Cập nhật state ngay lập tức để tránh vấn đề timing
-          setSavedBooks(savedBooksFromApi);
-          setFavoriteBooks(favoriteBooksFromApi);
-          
-          console.log(`📚 Found ${savedBooksFromApi.length} saved books and ${favoriteBooksFromApi.length} favorite books`);
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+            setError('Vui lòng đăng nhập để xem sách đã lưu');
+            return [];
         }
-
-        return books;
-      } else {
-        console.warn("📚 API returned invalid data structure");
-
-        if (isMountedRef.current) {
-          setApiBooks([]);
-          apiDataLoadedRef.current = true;
-          setError("Không thể tải dữ liệu từ máy chủ");
-          setSavedBooks([]);
-          setFavoriteBooks([]);
+        const response = await fetch(
+            `${API_URL}/user-books`,
+            { 
+                signal,
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            }
+        );
+        if (!response.ok) {
+            if (response.status === 401) {
+                await AsyncStorage.multiRemove([
+                    'token',
+                    'authToken',
+                    'user',
+                    'email',
+                    'user_id'
+                ]);
+                setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+                return [];
+            }
+            throw new Error(`API responded with status ${response.status}`);
         }
-
-        return [];
-      }
+        const data = await response.json();
+        if (data.status && data.data) {
+            const transformBook = (book) => ({
+                id: book.book_id,
+                title: book.name_book,
+                description: book.title,
+                image: typeof book.image === 'string' ? { uri: book.image } : require('../../assets/images/bia1.png'),
+                author: book.author ? book.author.name_author : 'Không rõ tác giả',
+                price: book.is_free ? 'Miễn phí' : `${book.price} ₫`,
+                genre: book.category ? book.category.name_category : 'Chưa phân loại',
+                pages: book.pages || '0',
+                publisher: book.publisher || 'NXB Trẻ',
+                year: book.year || '2023',
+                file_path: book.file_path,
+                is_saved: book.is_saved,
+                is_favorite: book.is_favorite
+            });
+            const savedBooks = (data.data.saved_books || []).map(transformBook);
+            const favoriteBooks = (data.data.favorite_books || []).map(transformBook);
+            setSavedBooks(savedBooks);
+            setFavoriteBooks(favoriteBooks);
+            savedIdsRef.current = savedBooks.map(book => book.id);
+            favoriteIdsRef.current = favoriteBooks.map(book => book.id);
+            console.log(`📚 Loaded ${savedBooks.length} saved books and ${favoriteBooks.length} favorite books`);
+        }
+        return [...(data.data.saved_books || []), ...(data.data.favorite_books || [])];
     } catch (error) {
-      if (error.name === "AbortError") {
-        console.log("📚 API fetch was aborted");
+        if (error.name === 'AbortError') {
+            console.log('📚 Fetch was aborted');
+            return [];
+        }
+        console.error('📚 Error fetching books:', error);
+        setError('Không thể tải dữ liệu, vui lòng thử lại sau');
         return [];
-      }
-
-      console.error("📚 Error fetching books from API:", error);
-
-      if (isMountedRef.current) {
-        setApiBooks([]);
-        apiDataLoadedRef.current = true;
-        setError("Không thể kết nối đến máy chủ: " + error.message);
-        setSavedBooks([]);
-        setFavoriteBooks([]);
-      }
-
-      return [];
     }
   };
 
@@ -415,25 +349,9 @@ export default function SavedScreen() {
     return null;
   };
 
-  // Load and process saved books with proper error handling
-  const loadSavedBooks = async () => {
-    console.log("📚 loadSavedBooks nên không còn được gọi trực tiếp nữa");
-    
-    // Sách đã được tải và lọc trực tiếp trong fetchBooksFromAPI
-    // Không cần thực hiện thêm bất kỳ hành động nào ở đây
-  };
-
-  // Load and process favorite books with proper error handling
-  const loadFavoriteBooks = async () => {
-    console.log("📚 loadFavoriteBooks nên không còn được gọi trực tiếp nữa");
-    
-    // Sách đã được tải và lọc trực tiếp trong fetchBooksFromAPI
-    // Không cần thực hiện thêm bất kỳ hành động nào ở đây
-  };
-
   // Làm mới dữ liệu theo yêu cầu người dùng
   const onRefresh = async () => {
-    if (isLoadingRef.current) return;
+    if (isLoadingRef.current || !userId) return;
 
     console.log("📚 Manual refresh triggered");
     setRefreshing(true);
@@ -519,6 +437,8 @@ export default function SavedScreen() {
   // Tải lại dữ liệu mỗi khi màn hình được focus
   useFocusEffect(
     React.useCallback(() => {
+      if (!userId) return;
+      
       console.log("📚 Saved screen focused");
       isMountedRef.current = true;
 
@@ -581,20 +501,12 @@ export default function SavedScreen() {
         // Hủy bỏ tất cả API fetch đang chạy
         controller.abort();
       };
-    }, [])
+    }, [userId])
   );
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <View className="px-4 py-4 flex-row justify-between items-center">
-        <Text className="text-3xl font-bold">Sách của tôi</Text>
-        <TouchableOpacity
-          onPress={clearAllStorageData}
-          className="bg-red-500 px-4 py-2 rounded-full"
-        >
-          <Text className="text-white font-semibold">Xóa tất cả</Text>
-        </TouchableOpacity>
-      </View>
+        <Text className="text-4xl font-bold mt-2 px-4">Sách của tôi</Text>
 
       <View className="flex-row border-b border-gray-200 mb-2">
         <TabButton
@@ -632,7 +544,7 @@ export default function SavedScreen() {
           data={booksToDisplay.slice(0, 20)}
           renderItem={({ item, index }) => (
             <View
-              className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-sm"
+              className=""
               style={{
                 width: "47%",
                 marginLeft: index % 2 === 0 ? 8 : "3%",
@@ -650,7 +562,7 @@ export default function SavedScreen() {
           contentContainerStyle={{
             paddingHorizontal: 8,
             paddingVertical: 12,
-            paddingBottom: 120, // Thêm padding để tránh bị che bởi tabbar
+            paddingBottom: 120,
             flexGrow: 1,
           }}
           columnWrapperStyle={{

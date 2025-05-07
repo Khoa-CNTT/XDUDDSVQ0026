@@ -109,9 +109,9 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
     if (!item.image) {
       // Nếu không có ảnh
       return (
-        <View className="w-full h-[180px] justify-center items-center bg-gray-100 rounded-t-xl">
-          <Ionicons name="book-outline" size={28} color="#999" />
-          <Text className="mt-2 text-xs text-gray-500">No Image</Text>
+        <View className="w-full h-[200px] justify-center items-center bg-gray-100">
+          <Ionicons name="book-outline" size={32} color="#999" />
+          <Text className="mt-2 text-xs text-gray-500">Không có ảnh</Text>
         </View>
       );
     }
@@ -121,7 +121,7 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
       return (
         <Image
           source={{ uri: item.image }}
-          className="w-full h-[180px] rounded-t-xl"
+          className="w-full h-[200px]"
           resizeMode="cover"
           defaultSource={require('../../../assets/images/bia1.png')}
         />
@@ -131,28 +131,11 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
       return (
         <Image
           source={item.image}
-          className="w-full h-[180px] rounded-t-xl"
+          className="w-full h-[200px]"
           resizeMode="cover"
         />
       );
     }
-  };
-
-  const renderRating = () => {
-    const rating = item.rating || 0;
-    return (
-      <View className="flex-row items-center">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Ionicons 
-            key={star}
-            name={star <= rating ? "star" : "star-outline"} 
-            size={12} 
-            color={star <= rating ? "#FFC107" : "#ccc"} 
-            style={{marginRight: 2}}
-          />
-        ))}
-      </View>
-    );
   };
 
   const handlePress = () => {
@@ -177,37 +160,38 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
   };
 
   // Xử lý tiêu đề sách - loại bỏ khoảng trắng nếu cần
-  const bookTitle = item.title || item.name_book || 'Untitled Book';
+  const bookTitle = item.title || item.name_book || 'Sách không tiêu đề';
   // ID sách không khoảng trắng để sử dụng làm id
   const bookIdNoSpace = removeWhitespace(item.id || item.book_id || '');
 
   return (
     <TouchableOpacity
-      className="w-[150px] mr-3 mb-3 rounded-xl bg-white shadow-sm overflow-hidden"
+      className="w-[170px] mx-1 mb-3 rounded-lg bg-white overflow-hidden"
       style={{
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 4,
+        height: 290, // Set fixed total height
       }}
       onPress={handlePress}
       onLongPress={readingProgress > 0 ? handleDeleteProgress : null}
       delayLongPress={800}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
     >
-      <View className="relative rounded-t-xl overflow-hidden">
+      <View className="relative">
         {renderBookCover()}
         
         {item.price && item.price.includes('Miễn phí') && (
-          <View className="absolute top-2 right-2 bg-green-500 px-2 py-1 rounded-lg">
-            <Text className="text-white text-xs font-bold">Free</Text>
+          <View className="absolute top-2 right-2 bg-green-500 px-1.5 py-0.5 rounded-md">
+            <Text className="text-white text-[10px] font-bold">Free</Text>
           </View>
         )}
         
         {readingProgress > 0 && (
-          <View className="absolute bottom-0 left-0 right-0 bg-black/50 p-2">
-            <View className="h-1 bg-white/30 rounded overflow-hidden">
+          <View className="absolute bottom-0 left-0 right-0 bg-black/60 py-1 px-1.5">
+            <View className="h-1 bg-white/30 rounded-full overflow-hidden">
               <View 
                 className="h-full bg-blue-500"
                 style={{ width: `${readingProgress}%` }}
@@ -215,7 +199,7 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
             </View>
             
             {readingProgress >= 5 && (
-              <Text className="text-white text-[10px] text-center mt-0.5">
+              <Text className="text-white text-[9px] text-center mt-0.5">
                 {Math.round(readingProgress)}%
               </Text>
             )}
@@ -223,21 +207,27 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
         )}
       </View>
       
-      <View className="p-2.5">
-        <Text
-          className="text-sm font-semibold mb-1 text-gray-800"
-          numberOfLines={2}
-        >
-          {bookTitle}
-        </Text>
-        <Text className="text-xs text-gray-500 mb-1">{item.author || 'Unknown Author'}</Text>
-        
-        {renderRating()}
+      <View style={{ height: 90 }} className="p-2.5 justify-between">
+        <View>
+          <Text
+            className="text-sm font-semibold text-gray-800 leading-tight"
+            numberOfLines={2}
+            style={{ minHeight: 40 }}
+          >
+            {bookTitle}
+          </Text>
+          <Text 
+            className="text-xs text-gray-500" 
+            numberOfLines={1}
+          >{item.author || 'Không rõ tác giả'}</Text>
+        </View>
         
         {item.price && (
-          <Text className="text-xs font-semibold text-red-500 mt-1">
-            {item.price}
-          </Text>
+          <View className="mt-2 w-full flex items-end">
+            <Text className="text-xs font-bold text-red-500">
+              {item.price}
+            </Text>
+          </View>
         )}
       </View>
     </TouchableOpacity>
@@ -249,8 +239,7 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
     prevProps.item.title === nextProps.item.title &&
     prevProps.item.name_book === nextProps.item.name_book &&
     prevProps.item.image === nextProps.item.image &&
-    prevProps.item.price === nextProps.item.price &&
-    prevProps.item.rating === nextProps.item.rating
+    prevProps.item.price === nextProps.item.price
   );
 });
 

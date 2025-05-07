@@ -230,7 +230,10 @@ export default function LogIn() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity className="flex items-end mb-5">
+            <TouchableOpacity 
+              className="flex items-end mb-5"
+              onPress={() => router.push("/(auth)/ForgotPassword")}
+            >
               <Text className="text-gray-700 mt-2">Quên mật khẩu ?</Text>
             </TouchableOpacity>
             <TouchableOpacity

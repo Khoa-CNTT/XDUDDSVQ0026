@@ -11,14 +11,10 @@ import {
   Dimensions,
   RefreshControl,
   StatusBar,
-  StyleSheet,
 } from 'react-native';
 import Animated, {
   useSharedValue,
-  useAnimatedStyle,
   withSpring,
-  interpolate,
-  Extrapolate,
 } from 'react-native-reanimated';
 import { API_URL } from '../config';
 import RenderBookItem from "../components/BookStore/RenderBookItem";
@@ -61,34 +57,37 @@ const BookBanner = ({ data }) => {
   const renderItem = ({ item }) => (
     <TouchableOpacity
       activeOpacity={0.8}
-      style={styles.carouselItem}
+      className="w-[90vw] h-[200px] rounded-2xl overflow-hidden mx-2"
     >
       <Image
         source={typeof item.image === 'string' ? { uri: item.image } : item.image}
-        style={styles.bannerImage}
+        className="w-full h-full object-cover"
       />
       
-      <View style={styles.bannerGradient} />
+      <View className="absolute left-0 right-0 bottom-0 h-[70%] rounded-2xl bg-black/50 opacity-90" />
       
       {item.badge && (
-        <View style={[styles.badgeContainer, { backgroundColor: item.color || '#ff5a5f' }]}>
-          <Text style={styles.badgeText}>{item.badge}</Text>
+        <View className="absolute top-4 right-4 px-3 py-1.5 rounded-full" style={{ backgroundColor: item.color || '#ff5a5f' }}>
+          <Text className="text-white font-bold text-xs">{item.badge}</Text>
         </View>
       )}
       
-      <View style={styles.bannerContent}>
-        <Text style={styles.bannerTitle}>{item.title}</Text>
-        <Text style={styles.bannerSubtitle}>{item.subtitle}</Text>
+      <View className="absolute bottom-0 left-0 right-0 p-4">
+        <Text className="text-white text-2xl font-bold mb-1 text-shadow">{item.title}</Text>
+        <Text className="text-white text-sm mb-3 text-shadow">{item.subtitle}</Text>
         
-        <TouchableOpacity style={[styles.bannerButton, { backgroundColor: item.color || '#ff5a5f' }]}>
-          <Text style={styles.bannerButtonText}>{item.buttonText}</Text>
+        <TouchableOpacity 
+          className="px-4 py-2 rounded-full self-start"
+          style={{ backgroundColor: item.color || '#ff5a5f' }}
+        >
+          <Text className="text-white font-bold text-xs">{item.buttonText}</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.carouselContainer}>
+    <View className="my-4">
       <Animated.FlatList
         data={data}
         renderItem={renderItem}
@@ -99,18 +98,15 @@ const BookBanner = ({ data }) => {
         snapToInterval={ITEM_WIDTH}
         decelerationRate="fast"
         onScroll={onScroll}
-        contentContainerStyle={styles.carouselContent}
+        contentContainerClassName="px-4"
       />
       
-      <View style={styles.paginationContainer}>
+      <View className="flex-row justify-center items-center mt-4">
         {data.map((_, i) => (
           <TouchableOpacity
             key={`dot-${i}`}
-            style={[
-              styles.paginationDot,
-              activeIndex === i && styles.paginationDotActive,
-              { backgroundColor: activeIndex === i ? '#ff5a5f' : '#ccc' }
-            ]}
+            className={`h-2 mx-1 rounded-full ${activeIndex === i ? 'w-5' : 'w-2'}`}
+            style={{ backgroundColor: activeIndex === i ? '#ff5a5f' : '#ccc' }}
             onPress={() => setActiveIndex(i)}
           />
         ))}
@@ -123,25 +119,13 @@ const BookBanner = ({ data }) => {
 const CategoryButton = ({ category, count, isActive, onPress }) => (
   <TouchableOpacity 
     onPress={onPress} 
-    style={[
-      styles.categoryButton,
-      isActive && styles.categoryButtonActive
-    ]}
+    className={`flex-row items-center py-2 px-4 rounded-full mx-1 ${isActive ? 'bg-[#ff5a5f]' : 'bg-gray-100'}`}
   >
-    <Text style={[
-      styles.categoryButtonText,
-      isActive && styles.categoryButtonTextActive
-    ]}>
+    <Text className={`font-medium ${isActive ? 'text-white' : 'text-gray-600'}`}>
       {category.name_category}
     </Text>
-    <View style={[
-      styles.categoryCountContainer,
-      isActive && styles.categoryCountContainerActive
-    ]}>
-      <Text style={[
-        styles.categoryCountText,
-        isActive && styles.categoryCountTextActive
-      ]}>
+    <View className={`ml-2 px-2 py-0.5 rounded-full ${isActive ? 'bg-white/30' : 'bg-gray-200'}`}>
+      <Text className={`text-xs font-bold ${isActive ? 'text-white' : 'text-gray-600'}`}>
         {count}
       </Text>
     </View>
@@ -150,33 +134,36 @@ const CategoryButton = ({ category, count, isActive, onPress }) => (
 
 // Section Header Component
 const SectionHeader = ({ title, onSeeAll }) => (
-  <View style={styles.sectionHeader}>
-    <Text style={styles.sectionTitle}>{title}</Text>
+  <View className="flex-row justify-between items-center px-4 mb-3">
+    <Text className="text-lg font-bold text-gray-800">{title}</Text>
     {onSeeAll && (
       <TouchableOpacity onPress={onSeeAll}>
-        <Text style={styles.seeAllText}>Xem tất cả</Text>
+        <Text className="text-[#ff5a5f] font-medium">Xem tất cả</Text>
       </TouchableOpacity>
     )}
   </View>
 );
 
 // BookList Horizontal Component
-const BookListHorizontal = ({ data, title, onSeeAll, handleBookPress }) => (
-  <View style={styles.bookListContainer}>
-    <SectionHeader title={title} onSeeAll={onSeeAll} />
-    <FlatList
-      data={data}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      renderItem={({ item }) => <RenderBookItem item={item} onPress={handleBookPress} />}
-      keyExtractor={(item) => item.id.toString()}
-      contentContainerStyle={styles.bookListContent}
-      ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Không có sách nào</Text>
-        </View>
-      }
-    />
+const BookListHorizontal = ({ data, title, handleBookPress }) => (
+  <View className="my-3">
+    <SectionHeader title={title} />
+    <View className="px-1">
+      <FlatList
+        data={data}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        renderItem={({ item }) => <RenderBookItem item={item} onPress={handleBookPress} />}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={{ paddingHorizontal: 4 }}
+        ItemSeparatorComponent={() => <View style={{ width: 6 }} />}
+        ListEmptyComponent={
+          <View className="p-5 items-center">
+            <Text className="text-gray-400 text-sm">Không có sách nào</Text>
+          </View>
+        }
+      />
+    </View>
   </View>
 );
 
@@ -489,13 +476,22 @@ export default function BookStore() {
     });
   };
 
+  // Lấy tối đa 4 quyển sách ngẫu nhiên từ danh mục
+  const getRandomBooks = (books, count = 4) => {
+    if (!books || books.length <= count) return books;
+    
+    // Tạo bản sao của mảng sách để không ảnh hưởng đến dữ liệu gốc
+    const shuffled = [...books].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+  };
+
   // Render loading state
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <SafeAreaView className="flex-1 justify-center items-center bg-white">
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <ActivityIndicator size="large" color="#ff5a5f" />
-        <Text style={styles.loadingText}>Đang tải thư viện sách...</Text>
+        <Text className="mt-4 text-base text-gray-500">Đang tải thư viện sách...</Text>
       </SafeAreaView>
     );
   }
@@ -503,28 +499,31 @@ export default function BookStore() {
   // Render error state
   if (error) {
     return (
-      <SafeAreaView style={styles.errorContainer}>
+      <SafeAreaView className="flex-1 justify-center items-center bg-white p-5">
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <Ionicons name="alert-circle-outline" size={64} color="#ff5a5f" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadData}>
-          <Text style={styles.retryButtonText}>Thử lại</Text>
+        <Text className="mt-4 text-base text-gray-500 text-center">{error}</Text>
+        <TouchableOpacity 
+          className="mt-6 px-6 py-3 bg-[#ff5a5f] rounded-lg"
+          onPress={loadData}
+        >
+          <Text className="text-white font-bold text-base">Thử lại</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView className="flex-1 bg-white">
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
       {/* Header */}
-      <View style={styles.header}>
+      <View className="flex-row justify-between items-center px-4 py-4">
         <View>
-          <Text style={styles.headerTitle}>Thư viện sách</Text>
-          <Text style={styles.headerSubtitle}>Khám phá hàng nghìn cuốn sách hay</Text>
+          <Text className="text-2xl font-bold text-gray-800">Thư viện sách</Text>
+          <Text className="text-sm text-gray-500 mt-1">Khám phá hàng nghìn cuốn sách hay</Text>
         </View>
-        <TouchableOpacity style={styles.searchButton}>
+        <TouchableOpacity className="w-10 h-10 bg-gray-100 rounded-full justify-center items-center">
           <Ionicons name="search-outline" size={24} color="#333" />
         </TouchableOpacity>
       </View>
@@ -532,7 +531,8 @@ export default function BookStore() {
       {/* Main Content */}
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollViewContent}
+        className="pb-32"
+        contentContainerStyle={{ paddingBottom: 80 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -548,18 +548,20 @@ export default function BookStore() {
         <BookListHorizontal
           data={featured}
           title="Sách nổi bật"
-          onSeeAll={() => router.push('/AllBooks?type=featured')}
           handleBookPress={handleBookPress}
         />
         
         {/* Categories */}
-        <View style={styles.categoriesContainer}>
-          <SectionHeader title="Danh mục" />
+        <View className="my-3">
+          <SectionHeader 
+            title="Danh mục" 
+            onSeeAll={() => router.push('/Categories')}
+          />
           
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesContent}
+            className="px-3"
           >
             {categories.map((category) => (
               <CategoryButton
@@ -574,31 +576,33 @@ export default function BookStore() {
         </View>
         
         {/* Books by Category */}
-        <View style={styles.categoryBooksContainer}>
+        <View className="my-3 pb-2">
           <SectionHeader 
             title={categories.find(c => c.category_id === activeCategory)?.name_category || 'Danh mục'} 
-            onSeeAll={() => {
-              const category = categories.find(c => c.category_id === activeCategory);
-              if (category) {
-                handleSeeAllCategory(category.category_id, category.name_category);
-              }
-            }}
+            onSeeAll={() => handleSeeAllCategory(
+              activeCategory, 
+              categories.find(c => c.category_id === activeCategory)?.name_category
+            )}
           />
           
           {categorizedBooks[activeCategory]?.length > 0 ? (
-            <FlatList
-              data={categorizedBooks[activeCategory].slice(0, 6)}
-              numColumns={2}
-              scrollEnabled={false}
-              renderItem={({ item }) => <RenderBookItem item={item} onPress={handleBookPress} />}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.categoryBooksContent}
-              columnWrapperStyle={styles.categoryBooksColumns}
-            />
+            <View className="px-3">
+              <FlatList
+                data={getRandomBooks(categorizedBooks[activeCategory])}
+                numColumns={2}
+                scrollEnabled={false}
+                renderItem={({ item }) => <RenderBookItem item={item} onPress={handleBookPress} />}
+                keyExtractor={(item) => item.id.toString()}
+                columnWrapperStyle={{ 
+                  justifyContent: 'space-between',
+                  marginBottom: 12,
+                }}
+              />
+            </View>
           ) : (
-            <View style={styles.noBooksContainer}>
+            <View className="py-10 px-4 items-center justify-center bg-gray-50 mx-4 mb-5 rounded-xl">
               <Ionicons name="book-outline" size={48} color="#ddd" />
-              <Text style={styles.noBooksText}>Chưa có sách trong danh mục này</Text>
+              <Text className="mt-3 text-gray-400 text-center">Chưa có sách trong danh mục này</Text>
             </View>
           )}
         </View>
@@ -607,274 +611,15 @@ export default function BookStore() {
         <BookListHorizontal
           data={recommended}
           title="Có thể bạn thích"
-          onSeeAll={() => router.push('/AllBooks?type=recommended')}
           handleBookPress={handleBookPress}
         />
+        
+        {/* Extra padding to avoid tab bar overlap */}
+        <View style={{ height: 30 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  searchButton: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 20,
-  },
-  errorText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  retryButton: {
-    marginTop: 24,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: '#ff5a5f',
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
-  carouselContainer: {
-    marginVertical: 16,
-  },
-  carouselContent: {
-    paddingHorizontal: 16,
-  },
-  carouselItem: {
-    width: ITEM_WIDTH,
-    height: 200,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginHorizontal: 8,
-  },
-  bannerImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  bannerGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '70%',
-    borderRadius: 16,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    opacity: 0.9,
-  },
-  badgeContainer: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  badgeText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  bannerContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-  },
-  bannerTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-  },
-  bannerSubtitle: {
-    color: '#fff',
-    fontSize: 14,
-    marginBottom: 12,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-  },
-  bannerButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
-  },
-  bannerButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  paginationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
-  },
-  paginationDotActive: {
-    width: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  seeAllText: {
-    fontSize: 14,
-    color: '#ff5a5f',
-    fontWeight: '500',
-  },
-  bookListContainer: {
-    marginVertical: 16,
-  },
-  bookListContent: {
-    paddingHorizontal: 12,
-  },
-  emptyContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: '#999',
-    fontSize: 14,
-  },
-  categoriesContainer: {
-    marginVertical: 16,
-  },
-  categoriesContent: {
-    paddingHorizontal: 12,
-  },
-  categoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    marginHorizontal: 4,
-  },
-  categoryButtonActive: {
-    backgroundColor: '#ff5a5f',
-  },
-  categoryButtonText: {
-    color: '#666',
-    fontWeight: '500',
-  },
-  categoryButtonTextActive: {
-    color: '#fff',
-  },
-  categoryCountContainer: {
-    backgroundColor: '#eee',
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  categoryCountContainerActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  categoryCountText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  categoryCountTextActive: {
-    color: '#fff',
-  },
-  categoryBooksContainer: {
-    marginVertical: 16,
-  },
-  categoryBooksContent: {
-    paddingHorizontal: 8,
-    paddingBottom: 16,
-  },
-  categoryBooksColumns: {
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  noBooksContainer: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f9f9f9',
-    marginHorizontal: 16,
-    marginBottom: 20,
-    borderRadius: 12,
-  },
-  noBooksText: {
-    marginTop: 12,
-    color: '#999',
-    textAlign: 'center',
-  },
-  scrollViewContent: {
-    paddingBottom: 120,
-  },
-});
 
 
 
