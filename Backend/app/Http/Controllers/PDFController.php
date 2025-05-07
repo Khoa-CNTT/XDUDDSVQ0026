@@ -56,10 +56,28 @@ class PDFController extends Controller
         }
     }
 
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $pdfs = PDF::where('user_id', Auth::user()->user_id)->get();
+            // Lấy thông tin người dùng hiện tại đã xác thực
+            $user = Auth::user();
+            
+            // Lấy email/user_id từ request nếu có
+            $requestEmail = $request->input('email');
+            $requestUserId = $request->input('user_id');
+            
+            // Kiểm tra email hoặc user_id có khớp với người dùng đang đăng nhập
+            if (($requestEmail && $user->email != $requestEmail) || 
+                ($requestUserId && $user->id != $requestUserId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không thể xem tài liệu của tài khoản khác'
+                ], 403);
+            }
+            
+            // Tiếp tục thực hiện lấy tài liệu PDF của người dùng
+            $pdfs = PDF::where('user_id', $user->user_id)->get();
+            
             return response()->json([
                 'success' => true,
                 'data' => $pdfs
@@ -143,12 +161,28 @@ class PDFController extends Controller
         }
     }
 
-    public function show(PDF $pdf)
+    public function show(Request $request, PDF $pdf)
     {
         try {
-            if (Auth::user()->user_id !== $pdf->user_id) {
+            $user = Auth::user();
+            
+            // Kiểm tra người dùng hiện tại với người sở hữu tài liệu
+            if ($user->user_id !== $pdf->user_id) {
                 throw new AuthorizationException('You are not authorized to view this PDF.');
             }
+            
+            // Nếu có email hoặc user_id từ request, kiểm tra khớp với người dùng hiện tại
+            $requestEmail = $request->input('email');
+            $requestUserId = $request->input('user_id');
+            
+            if (($requestEmail && $user->email != $requestEmail) || 
+                ($requestUserId && $user->id != $requestUserId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không thể xem tài liệu của tài khoản khác'
+                ], 403);
+            }
+            
             return response()->json([
                 'success' => true,
                 'data' => $pdf

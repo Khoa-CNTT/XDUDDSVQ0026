@@ -7,6 +7,8 @@ use App\Http\Controllers\BookController;
 use App\Http\Controllers\AuthorController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\PDFController;
+use App\Http\Controllers\DonateBookController;
+use App\Http\Controllers\UserBookPreferenceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,24 +32,29 @@ Route::get('/pdfs/{pdf}/download-with-token', [PDFController::class, 'downloadWi
 // Public Book routes
 Route::get('/books', [BookController::class, 'danhSach']);
 Route::get('/books/free', [BookController::class, 'sachMienPhi']);
+Route::get('/books/trending', [BookController::class, 'xuHuong']);
 Route::get('/books/paid', [BookController::class, 'sachCoPhi']);
 Route::get('/books/search', [BookController::class, 'timKiem']);
 Route::get('/books/category/{categoryId}', [BookController::class, 'theoTheLoai']);
 Route::get('/books/author/{authorId}', [BookController::class, 'theoTacGia']);
 Route::get('/books/{id}', [BookController::class, 'chiTiet']);
-Route::post('/books/{id}/save', [BookController::class, 'luuSach']);
-Route::post('/books/{id}/favorite', [BookController::class, 'yeuThichSach']);
-
 
 // Public Category routes
 Route::get('/categories', [CategoryController::class, 'danhSach']);
 Route::get('/categories/{id}', [CategoryController::class, 'chiTiet']);
+
+// Public Donate Book routes
+Route::post('/donate-book', [DonateBookController::class, 'donateBook']);
+Route::get('/user-donations-count', [DonateBookController::class, 'getUserDonationsCount']);
+Route::get('/donated-books', [DonateBookController::class, 'getAllDonatedBooks']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
     // User routes
     Route::get('/user', [UsersController::class, 'getData']);
     Route::post('/dang-xuat', [UsersController::class, 'dangXuat']);
+    Route::post('/doi-mat-khau', [UsersController::class, 'doiMatKhau']);
+    Route::post('/cap-nhat-thong-tin', [UsersController::class, 'capNhatThongTin']);
     Route::get('/devices', [UsersController::class, 'getDevices']);
     Route::delete('/devices/{tokenId}', [UsersController::class, 'logoutDevice']);
     Route::delete('/devices', [UsersController::class, 'logoutAllDevices']);
@@ -81,4 +88,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/pdfs/{pdf}', [PDFController::class, 'update']);
     Route::delete('/pdfs/{pdf}', [PDFController::class, 'destroy']);
     Route::get('/pdfs/{pdf}/download', [PDFController::class, 'download']);
+
+    // User book preferences routes
+    Route::post('/books/{id}/save', [UserBookPreferenceController::class, 'luuSach']);
+    Route::post('/books/{id}/favorite', [UserBookPreferenceController::class, 'yeuThichSach']);
+    Route::get('/user-books', [UserBookPreferenceController::class, 'getUserBooks']);
 });

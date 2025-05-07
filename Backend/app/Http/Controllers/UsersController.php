@@ -144,15 +144,15 @@ class UsersController extends Controller
     {
         $user = Users::where('email', $request->email)->first();
         if($user){
-            $newPassword = Str::random(8);            
+            $newPassword = Str::random(6);            
             $user->password = Hash::make($newPassword);
             $user->save();
             
             $data = [
-                'ho_va_ten' => $user->name_user ?? $user->username,
-                'mat_khau' => $newPassword
+                'name' => $user->name_user ?? $user->username,
+                'password' => $newPassword
             ];
-            Mail::to($request->email)->send(new MasterMail('Thông Tin Mật Khẩu Mới Của Bạn', 'quen_mat_khau', $data));
+            Mail::to($request->email)->send(new MasterMail('Thông Tin Mật Khẩu Mới Của Bạn', 'mail.quen_mat_khau', $data));
             return response()->json([
                 'status'    =>  true,
                 'message'   =>  'Vui lòng kiểm tra email để lấy mật khẩu mới!'
@@ -188,55 +188,126 @@ class UsersController extends Controller
         ]);
     }
 
-    /**
-     * Đăng xuất khỏi một thiết bị cụ thể
-     */
-    public function logoutDevice(Request $request, $tokenId)
-    {
-        $token = $request->user()->tokens()->find($tokenId);
+    // /**
+    //  * Đăng xuất khỏi một thiết bị cụ thể
+    //  */
+    // public function logoutDevice(Request $request, $tokenId)
+    // {
+    //     $token = $request->user()->tokens()->find($tokenId);
         
-        if (!$token) {
+    //     if (!$token) {
+    //         return response()->json([
+    //             'status' => false,
+    //             'message' => 'Không tìm thấy thiết bị!'
+    //         ]);
+    //     }
+        
+    //     $token->delete();
+        
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Đã đăng xuất khỏi thiết bị thành công!'
+    //     ]);
+    // }
+
+    // /**
+    //  * Đăng xuất khỏi tất cả các thiết bị trừ thiết bị hiện tại
+    //  */
+    // public function logoutAllDevices(Request $request)
+    // {
+    //     // Lấy token hiện tại
+    //     $currentTokenId = $request->user()->currentAccessToken()->id;
+        
+    //     // Xóa tất cả token khác
+    //     $request->user()->tokens()->where('id', '!=', $currentTokenId)->delete();
+        
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Đã đăng xuất khỏi tất cả các thiết bị khác!'
+    //     ]);
+    // }
+
+    // /**
+    //  * Đăng xuất khỏi tất cả các thiết bị bao gồm cả thiết bị hiện tại
+    //  */
+    // public function logoutAllDevicesIncludingCurrent(Request $request)
+    // {
+    //     $request->user()->tokens()->delete();
+        
+    //     return response()->json([
+    //         'status' => true,
+    //         'message' => 'Đã đăng xuất khỏi tất cả các thiết bị!'
+    //     ]);
+    // }
+
+    /**
+     * Đổi mật khẩu cho người dùng đã đăng nhập
+     */
+    public function doiMatKhau(Request $request)
+    {
+        $user = $request->user();
+        
+        // Validate request
+        $validator = validator($request->all(), [
+            'current_password' => 'required',
+            'new_password' => 'required|min:6',
+            'confirm_password' => 'required|same:new_password',
+        ]);
+
+        if ($validator->fails()) {
             return response()->json([
                 'status' => false,
-                'message' => 'Không tìm thấy thiết bị!'
+                'message' => 'Dữ liệu không hợp lệ',
+                'errors' => $validator->errors()
             ]);
         }
         
-        $token->delete();
+        // Check if current password is correct
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Mật khẩu hiện tại không đúng'
+            ]);
+        }
+        
+        // Update password
+        $user->password = Hash::make($request->new_password);
+        $user->save();
         
         return response()->json([
             'status' => true,
-            'message' => 'Đã đăng xuất khỏi thiết bị thành công!'
+            'message' => 'Đổi mật khẩu thành công'
         ]);
     }
 
     /**
-     * Đăng xuất khỏi tất cả các thiết bị trừ thiết bị hiện tại
+     * Cập nhật thông tin người dùng
      */
-    public function logoutAllDevices(Request $request)
+    public function capNhatThongTin(Request $request)
     {
-        // Lấy token hiện tại
-        $currentTokenId = $request->user()->currentAccessToken()->id;
+        $user = $request->user();
         
-        // Xóa tất cả token khác
-        $request->user()->tokens()->where('id', '!=', $currentTokenId)->delete();
-        
-        return response()->json([
-            'status' => true,
-            'message' => 'Đã đăng xuất khỏi tất cả các thiết bị khác!'
+        // Validate request
+        $validator = validator($request->all(), [
+            'name_user' => 'required|string|max:255',
         ]);
-    }
 
-    /**
-     * Đăng xuất khỏi tất cả các thiết bị bao gồm cả thiết bị hiện tại
-     */
-    public function logoutAllDevicesIncludingCurrent(Request $request)
-    {
-        $request->user()->tokens()->delete();
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Dữ liệu không hợp lệ',
+                'errors' => $validator->errors()
+            ]);
+        }
+        
+        // Update user info
+        $user->name_user = $request->name_user;
+        $user->save();
         
         return response()->json([
             'status' => true,
-            'message' => 'Đã đăng xuất khỏi tất cả các thiết bị!'
+            'message' => 'Cập nhật thông tin thành công',
+            'user' => $user
         ]);
     }
 }

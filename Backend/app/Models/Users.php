@@ -18,7 +18,7 @@ class Users extends Authenticatable
     public $incrementing = false;
     protected $keyType = 'string';
     
-    protected $fillable = ['user_id', 'name_user', 'email', 'password'];
+    protected $fillable = ['user_id', 'name_user', 'email', 'password', 'device_type', 'device_name', 'ip_address', 'last_used_at'];
     protected $hidden = ['password', 'remember_token'];
     protected $casts = [
         'password' => 'hashed',
