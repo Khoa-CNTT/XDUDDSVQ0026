@@ -27,6 +27,20 @@ export default function AppLayout() {
             headerShown: false,
         }}
        />
+       <Stack.Screen name="(auth)/ForgotPassword"
+        options={{
+            headerTransparent: false,
+            headerTitle: 'Quên Mật Khẩu',
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#fff',
+            },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: 'bold',
+            },
+        }}
+       />
        <Stack.Screen name="(tabs)"
         options={{
             headerTransparent: true,
@@ -62,9 +76,49 @@ export default function AppLayout() {
             animation: 'slide_from_right'
         }}
        />
-       <Stack.Screen name="pages/pdf-reader"
+      
+       <Stack.Screen name="AllDocuments"
         options={{
-            headerShown: false,
+            headerTransparent: false,
+            headerTitle: 'Tất cả tài liệu',
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#fff',
+            },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: 'bold',
+            },
+            animation: 'slide_from_right'
+        }}
+       />
+       <Stack.Screen name="CategoryBooks"
+        options={{
+            headerTransparent: false,
+            headerTitle: 'Danh mục sách',
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#fff',
+            },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: 'bold',
+            },
+            animation: 'slide_from_right'
+        }}
+       />
+       <Stack.Screen name="Categories"
+        options={{
+            headerTransparent: false,
+            headerTitle: 'Tất cả danh mục',
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#fff',
+            },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: 'bold',
+            },
             animation: 'slide_from_right'
         }}
        />

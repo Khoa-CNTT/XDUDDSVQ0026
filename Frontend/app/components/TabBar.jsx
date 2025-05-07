@@ -16,6 +16,14 @@ const TabBar = ({ state, descriptors, navigation }) => {
     const primaryColor ='#4f26dc';
     const greyColor = '#737373';
 
+    // Ánh xạ tên hiển thị của các tab sang tiếng Việt
+    const tabNames = {
+        'Home': 'Trang chủ',
+        'Library': 'Thư viện',
+        'BookStore': 'Cửa hàng',
+        'Saved': 'Đã lưu',
+        'Search': 'Tìm kiếm'
+    };
 
   return (
     <View style={styles.tabbar}>
@@ -26,7 +34,7 @@ const TabBar = ({ state, descriptors, navigation }) => {
             ? options.tabBarLabel
             : options.title !== undefined
               ? options.title
-              : route.name;
+              : tabNames[route.name] || route.name;
 
         {/* console.log('router name',route.name); */}
         if(['_sitemap' , '+not-found'].includes(route.name)) return null;

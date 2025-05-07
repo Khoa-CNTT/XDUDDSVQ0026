@@ -46,7 +46,7 @@ export default function HomeScreen() {
     
     // Cleanup when component unmounts
     return () => {
-      console.log('📚 Home component unmounted');
+      // console.log('📚 Home component unmounted');
       isMountedRef.current = false;
       
       if (checkIntervalRef.current) {

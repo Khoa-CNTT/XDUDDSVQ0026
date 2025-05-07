@@ -17,8 +17,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import * as FileSystem from 'expo-file-system';
-import RenderBookItem from "../components/Home/RenderBookItem"
-import SectionHeader from '../components/SectionHeader';
+
 
 // Tính toán kích thước phù hợp
 const { width } = Dimensions.get("window");
@@ -507,7 +506,7 @@ export default function Library() {
         const books = data.data.map(book => ({
           id: book.book_id,
           title: book.name_book,
-          author: book.author ? book.author.name_author : 'Unknown Author',
+          author: book.author ? book.author.name_author : 'Không rõ tác giả',
           image: book.image,
           file_path: book.file_path,
           price: book.is_free ? 'Miễn phí' : `${book.price} ₫`,
