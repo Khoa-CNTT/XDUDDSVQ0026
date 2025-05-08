@@ -39,7 +39,7 @@ export default function PdfLibraryScreen() {
       });
       
       const data = await response.json();
-      console.log('PDFs data:', data);
+      // console.log('PDFs data:', data);
       
       if (data.success) {
         setPdfs(data.data);

@@ -182,20 +182,8 @@ export default function BookStore() {
 
   // Xử lý khi sách được nhấn
   const handleBookPress = (book) => {
-    if (book.file_path) {
-      // Chuyển đến PDF viewer
-      router.push({
-        pathname: '/PdfViewer',
-        params: { 
-          pdfPath: book.file_path, 
-          pdfTitle: book.title || book.name_book,
-          pdfId: book.id || book.book_id
-        }
-      });
-    } else {
-      // Chuyển đến trang chi tiết sách
-      router.push(`/Books/${book.id || book.book_id}`);
-    }
+    // Luôn chuyển đến trang chi tiết sách bất kể có file_path hay không
+    router.push(`/Books/${book.id || book.book_id}`);
   };
 
   // Banner data

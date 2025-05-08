@@ -17,6 +17,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import * as FileSystem from 'expo-file-system';
+import { getRecentlyViewedPdfs, savePdfReadingProgress } from '../services/pdfService';
 
 
 // Tính toán kích thước phù hợp
@@ -48,19 +49,33 @@ export default function Library() {
   const [apiBooks, setApiBooks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pdfHistory, setPdfHistory] = useState([]);
   
   // Sử dụng useEffect để tải dữ liệu
   useEffect(() => {
     loadReadingProgress();
     loadBookshelves();
     fetchBooksFromAPI();
+    loadPdfHistoryFromServer(); // Thêm hàm mới để lấy lịch sử từ server
   }, []);
   
   // Sử dụng useFocusEffect để tải lại dữ liệu mỗi khi màn hình được focus
   useFocusEffect(
     React.useCallback(() => {
-      loadReadingProgress();
-      fetchPDFs();
+      console.log('📚 Library screen focused');
+      
+      // Tải lại dữ liệu khi tab được focus, nhưng chỉ khi cần thiết
+      const refreshDataOnFocus = async () => {
+        try {
+          await loadReadingProgress();
+          await loadPdfHistoryFromServer();
+          await fetchPDFs();
+        } catch (error) {
+          console.error('📚 Error refreshing library data:', error);
+        }
+      };
+      
+      refreshDataOnFocus();
       
       // Set up listener for reading progress updates
       const checkForProgressUpdates = async () => {
@@ -70,6 +85,7 @@ export default function Library() {
             console.log('Reading progress was updated, refreshing library data...');
             lastCheckedUpdate.current = lastUpdate;
             loadReadingProgress();
+            loadPdfHistoryFromServer();
             fetchPDFs();
           }
         } catch (error) {
@@ -92,6 +108,13 @@ export default function Library() {
   
   // Function để tính toán tiến độ đọc một cách nhất quán
   const getReadingProgressForPdf = (pdfId) => {
+    // Ưu tiên dữ liệu từ server trước
+    const serverProgress = pdfHistory.find(history => history.pdf_id == pdfId);
+    if (serverProgress) {
+      return parseInt(serverProgress.percentage, 10);
+    }
+    
+    // Nếu không có từ server, dùng dữ liệu local
     const progress = pdfReadingProgress[pdfId];
     if (!progress) return 0;
     
@@ -106,6 +129,46 @@ export default function Library() {
     }
     
     return 0;
+  };
+
+  // Tải lịch sử đọc PDF từ server
+  const loadPdfHistoryFromServer = async () => {
+    try {
+      console.log('📚 Loading PDF history from server...');
+      const response = await getRecentlyViewedPdfs();
+      
+      if (response.success && response.data) {
+        console.log(`📚 Loaded ${response.data.length} PDF history items from server`);
+        setPdfHistory(response.data);
+        
+        // Đồng bộ dữ liệu server xuống local storage
+        const progressData = {};
+        response.data.forEach(history => {
+          progressData[history.pdf_id] = {
+            page: history.current_page,
+            total: history.total_pages,
+            percentage: history.percentage,
+            timestamp: history.last_read_at || new Date().toISOString()
+          };
+        });
+        
+        // Cập nhật state pdfReadingProgress với dữ liệu từ server
+        setPdfReadingProgress(prevProgress => ({
+          ...prevProgress,
+          ...progressData
+        }));
+        
+        // Lưu vào local storage cho mỗi PDF
+        for (const [pdfId, progress] of Object.entries(progressData)) {
+          const key = `pdf_progress_${pdfId}`;
+          await AsyncStorage.setItem(key, JSON.stringify(progress));
+        }
+      } else {
+        console.log('📚 No PDF history found on server or error occurred');
+      }
+    } catch (error) {
+      console.error('📚 Error loading PDF history from server:', error);
+    }
   };
   
   // Tải dữ liệu giá sách từ AsyncStorage
@@ -160,10 +223,12 @@ export default function Library() {
     setShowSortOptions(false);
   };
 
-  // Tải thông tin tiến độ đọc các PDF
+  // Tải thông tin tiến độ đọc các PDF - cập nhật để sử dụng cả dữ liệu từ server và local
   const loadReadingProgress = async () => {
     try {
-      // Only use AsyncStorage (removed database sync)
+      console.log('📚 Loading local PDF reading progress...');
+      
+      // Lấy từ AsyncStorage để đảm bảo có dữ liệu khi offline
       const keys = await AsyncStorage.getAllKeys();
       const progressKeys = keys.filter(key => key.startsWith('pdf_progress_'));
       
@@ -184,7 +249,7 @@ export default function Library() {
         });
         
         setPdfReadingProgress(progressData);
-        console.log('Loaded reading progress from local storage for', Object.keys(progressData).length, 'PDFs');
+        console.log('📚 Loaded reading progress from local storage for', Object.keys(progressData).length, 'PDFs');
       }
     } catch (error) {
       console.error('Error loading reading progress:', error);
@@ -253,9 +318,16 @@ export default function Library() {
         filteredDocs = filteredDocs.map(doc => {
           // Always recalculate progress using the common function
           const progress = getReadingProgressForPdf(doc.id);
+          
+          // Tìm thông tin từ lịch sử server
+          const serverHistory = pdfHistory.find(h => h.pdf_id == doc.id);
+          
           return {
             ...doc,
-            progress
+            progress,
+            currentPage: serverHistory?.current_page || pdfReadingProgress[doc.id]?.page || 1,
+            totalPages: serverHistory?.total_pages || pdfReadingProgress[doc.id]?.total || 1,
+            lastReadAt: serverHistory?.last_read_at || pdfReadingProgress[doc.id]?.timestamp
           };
         });
         
@@ -313,8 +385,9 @@ export default function Library() {
           case 'recent':
           default:
             filteredDocs.sort((a, b) => {
-              const dateA = new Date(a.updated_at || a.created_at || 0);
-              const dateB = new Date(b.updated_at || b.created_at || 0);
+              // Ưu tiên sử dụng lastReadAt từ server trước
+              const dateA = new Date(a.lastReadAt || a.updated_at || a.created_at || 0);
+              const dateB = new Date(b.lastReadAt || b.updated_at || b.created_at || 0);
               return isAsc ? dateA - dateB : dateB - dateA;
             });
             break;
@@ -337,16 +410,24 @@ export default function Library() {
     router.push('/UploadPdf');
   };
 
-  // Xử lý khi chọn xem PDF
+  // Xử lý khi chọn xem PDF - cập nhật để sử dụng API
   const handleViewPdf = async (pdfId) => {
     try {
-      // Get the reading progress for this PDF
-      const progress = pdfReadingProgress[pdfId];
+      // Ưu tiên lấy tiến độ từ server
       let currentPage = 1;
       
-      if (progress && progress.page) {
-        currentPage = parseInt(progress.page, 10);
-        console.log(`Opening PDF at saved page ${currentPage}`);
+      // Tìm trong lịch sử từ server
+      const serverHistory = pdfHistory.find(h => h.pdf_id == pdfId);
+      if (serverHistory) {
+        currentPage = parseInt(serverHistory.current_page, 10);
+        console.log(`📚 Opening PDF at saved page ${currentPage} from server history`);
+      } else {
+        // Nếu không có từ server, sử dụng local
+        const localProgress = pdfReadingProgress[pdfId];
+        if (localProgress && localProgress.page) {
+          currentPage = parseInt(localProgress.page, 10);
+          console.log(`📚 Opening PDF at saved page ${currentPage} from local storage`);
+        }
       }
       
       // Check if the PDF exists locally
@@ -420,6 +501,13 @@ export default function Library() {
               )}
             </View>
           </View>
+          
+          {/* Hiển thị thời gian đọc gần đây nhất */}
+          {item.lastReadAt && (
+            <Text className="text-xs text-gray-500 mt-1">
+              Đọc gần đây: {new Date(item.lastReadAt).toLocaleDateString('vi-VN')}
+            </Text>
+          )}
           
           {/* Hiển thị các kệ sách chứa quyển này */}
           {containingShelves.length > 0 && (
@@ -532,6 +620,7 @@ export default function Library() {
   const onRefresh = async () => {
     setIsLoading(true);
     await fetchBooksFromAPI();
+    await loadPdfHistoryFromServer();
     setIsLoading(false);
   };
 

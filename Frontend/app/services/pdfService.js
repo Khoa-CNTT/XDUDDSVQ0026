@@ -2,6 +2,34 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import { API_URL } from '../config';
 
+// Thêm hàm getUserId riêng cho pdfService
+const getUserId = async () => {
+  try {
+    // Lấy trực tiếp user_id (cách chính thức)
+    const userId = await AsyncStorage.getItem('user_id');
+    if (userId) {
+      return userId;
+    }
+    
+    console.error('❌ ERROR: Không tìm thấy user_id trong bộ nhớ!');
+    console.error('❌ Người dùng cần đăng xuất và đăng nhập lại để nhận user_id từ server');
+    
+    // Thử kiểm tra token
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      console.error('❌ Token cũng không tồn tại, người dùng chưa đăng nhập');
+    } else {
+      console.error('❌ Token tồn tại nhưng user_id không được lưu, API có thể không trả về user_id');
+    }
+    
+    // Trả về null để báo hiệu lỗi
+    return null;
+  } catch (error) {
+    console.error('Error getting user ID:', error);
+    return null;
+  }
+};
+
 // Lấy danh sách PDF
 export const getAllPDFs = async () => {
   try {
@@ -216,6 +244,142 @@ export const downloadPDF = async (pdfId, customFileName = null) => {
   }
 };
 
+// Lưu tiến độ đọc PDF lên server
+export const savePdfReadingProgress = async (pdfId, currentPage, totalPages) => {
+  try {
+    const userId = await getUserId();
+    if (!userId) {
+      console.log('❌ Không thể lưu tiến độ: không có user_id');
+      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+    }
+    
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      console.log('❌ Không thể lưu tiến độ: không có token');
+      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+    }
+
+    // Validate pdfId
+    if (!pdfId || typeof pdfId !== 'string') {
+      console.error('❌ pdf_id không hợp lệ:', pdfId);
+      return { success: false, error: 'INVALID_PDF_ID', message: 'ID tài liệu không hợp lệ' };
+    }
+    
+    // Parse và validate các tham số
+    const currentPageInt = parseInt(currentPage, 10) || 1;
+    const totalPagesInt = parseInt(totalPages, 10) || 1;
+    const percentage = Math.floor((currentPageInt / totalPagesInt) * 100) || 0;
+    
+    // Lưu thông tin tiến độ vào local storage để hoạt động offline
+    const progress = { 
+      page: currentPageInt, 
+      total: totalPagesInt, 
+      percentage, 
+      timestamp: new Date().toISOString() 
+    };
+    
+    const key = `pdf_progress_${pdfId}`;
+    await AsyncStorage.setItem(key, JSON.stringify(progress));
+    
+    console.log('📄 Gửi dữ liệu đọc PDF lên server:', {
+      pdf_id: pdfId,
+      current_page: currentPageInt,
+      total_pages: totalPagesInt,
+      percentage: percentage
+    });
+    
+    // Gửi lên server
+    const response = await fetch(`${API_URL}/pdf-history`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        pdf_id: pdfId,
+        current_page: currentPageInt,
+        total_pages: totalPagesInt,
+        percentage: percentage
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.status) {
+      console.log('📄 Đã đồng bộ tiến độ đọc PDF lên server');
+      console.log(`📄 Đã lưu tiến độ đọc PDF lên server thành công: ${percentage}%`);
+      console.log(`📄 Đã cập nhật danh sách PDF đã xem cho người dùng ${userId}`);
+      return { success: true, data: data.data };
+    } else {
+      console.error('❌ Lỗi khi đồng bộ tiến độ đọc PDF:', data.message);
+      return { success: false, error: 'SERVER_ERROR', message: data.message };
+    }
+  } catch (error) {
+    console.error('Error saving PDF reading progress:', error);
+    return { success: false, error: 'NETWORK_ERROR', message: error.message };
+  }
+};
+
+// Lấy lịch sử đọc PDF từ server
+export const getRecentlyViewedPdfs = async () => {
+  try {
+    const userId = await getUserId();
+    if (!userId) {
+      console.log('❌ Không thể lấy danh sách tài liệu đã xem: không có user_id');
+      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+    }
+    
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      console.log('❌ Không thể lấy danh sách tài liệu đã xem: không có token');
+      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+    }
+    
+    console.log('📄 Đang lấy danh sách tài liệu đã xem cho người dùng:', userId);
+    
+    // Lấy từ API
+    const response = await fetch(`${API_URL}/pdf-history`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('❌ Lỗi khi lấy danh sách tài liệu đã xem:', errorData.message);
+      return { 
+        success: false, 
+        error: 'API_ERROR', 
+        message: errorData.message || `HTTP error! status: ${response.status}` 
+      };
+    }
+    
+    const data = await response.json();
+    
+    if (data.status && Array.isArray(data.data)) {
+      console.log(`📄 Đã lấy ${data.data.length} tài liệu đã xem từ server`);
+      return { success: true, data: data.data };
+    } else {
+      console.error('❌ Lỗi khi lấy danh sách tài liệu đã xem:', data.message || 'Không có dữ liệu');
+      return { 
+        success: false, 
+        error: 'INVALID_RESPONSE', 
+        message: data.message || 'Dữ liệu không hợp lệ' 
+      };
+    }
+  } catch (error) {
+    console.error('Error getting recently viewed PDFs:', error);
+    return { 
+      success: false, 
+      error: 'NETWORK_ERROR', 
+      message: error.message || 'Lỗi kết nối mạng' 
+    };
+  }
+};
+
 // Tạo đối tượng chứa tất cả các hàm
 const pdfService = {
   getAllPDFs,
@@ -223,7 +387,9 @@ const pdfService = {
   getPDFDetails,
   updatePDF,
   deletePDF,
-  downloadPDF
+  downloadPDF,
+  savePdfReadingProgress,
+  getRecentlyViewedPdfs
 };
 
 // Export default để sửa lỗi "missing required default export"

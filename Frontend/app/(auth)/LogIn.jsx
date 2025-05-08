@@ -78,9 +78,29 @@ export default function LogIn() {
       const loginInfo = await authService.getPreviousLoginInfo();
       
       if (loginInfo.hasLogin) {
-        console.log('Đăng nhập tự động thành công!');
-        // Chuyển hướng đến trang Home
-        router.push('/(tabs)/Home');
+        if (loginInfo.needReauth) {
+          // Nếu cần đăng nhập lại, không thể đăng nhập tự động
+          Alert.alert(
+            'Cần đăng nhập lại',
+            loginInfo.message || 'Vui lòng đăng nhập lại để cập nhật thông tin tài khoản.',
+            [
+              {
+                text: 'OK',
+                onPress: async () => {
+                  // Xóa thông tin đăng nhập cũ để tránh lỗi
+                  await AsyncStorage.multiRemove([
+                    'token', 'authToken', 'user', 'user_id'
+                  ]);
+                  setShowLoginModal(false);
+                }
+              }
+            ]
+          );
+        } else {
+          console.log('Đăng nhập tự động thành công!');
+          // Chuyển hướng đến trang Home
+          router.push('/(tabs)/Home');
+        }
       } else {
         Alert.alert('Lỗi đăng nhập', 'Không tìm thấy thông tin đăng nhập');
       }
@@ -103,12 +123,41 @@ export default function LogIn() {
         console.log('Previous login info:', previousLoginInfo);
         
         if (previousLoginInfo.hasLogin) {
-          // Hiển thị modal xác nhận đăng nhập
-          console.log('Setting previous user:', previousLoginInfo.user);
-          setPreviousUser(previousLoginInfo.user);
-          console.log('Setting showLoginModal to true');
-          setShowLoginModal(true);
-          console.log('Modal should be visible now');
+          if (previousLoginInfo.needReauth) {
+            // Có token nhưng cần đăng nhập lại vì user_id không hợp lệ
+            console.log('Detected temporary user ID. Re-login required.');
+            
+            // Hiển thị thông báo về việc cần đăng nhập lại
+            Alert.alert(
+              'Thông báo bảo mật',
+              previousLoginInfo.message || 'Vui lòng đăng nhập lại để cập nhật thông tin tài khoản.',
+              [
+                {
+                  text: 'OK',
+                  onPress: async () => {
+                    // Xóa thông tin đăng nhập cũ để tránh lỗi
+                    await AsyncStorage.multiRemove([
+                      'token', 'authToken', 'user', 'user_id'
+                    ]);
+                    setShowLoginModal(false);
+                  }
+                }
+              ]
+            );
+            
+            // Lấy email cũ để điền sẵn vào form
+            const oldEmail = await AsyncStorage.getItem('email');
+            if (oldEmail) {
+              setEmail(oldEmail);
+            }
+          } else {
+            // Hiển thị modal xác nhận đăng nhập bình thường
+            console.log('Setting previous user:', previousLoginInfo.user);
+            setPreviousUser(previousLoginInfo.user);
+            console.log('Setting showLoginModal to true');
+            setShowLoginModal(true);
+            console.log('Modal should be visible now');
+          }
         } else {
           // Không có thông tin đăng nhập trước đó, không làm gì cả
           console.log('No previous login found');
