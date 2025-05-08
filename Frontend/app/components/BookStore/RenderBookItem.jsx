@@ -142,20 +142,8 @@ const RenderBookItem = React.memo(({ item, onPress }) => {
     if (onPress) {
       onPress(item);
     } else {
-      if (item.file_path) {
-        // Chuyển đến PDF viewer
-        router.push({
-          pathname: '/PdfViewer',
-          params: { 
-            pdfPath: item.file_path, 
-            pdfTitle: item.title || item.name_book,
-            pdfId: item.id || item.book_id
-          }
-        });
-      } else {
-        // Chuyển đến trang chi tiết sách
-        router.push(`/Books/${item.id || item.book_id}`);
-      }
+      // Luôn chuyển đến trang chi tiết sách, không còn kiểm tra file_path
+      router.push(`/Books/${item.id || item.book_id}`);
     }
   };
 

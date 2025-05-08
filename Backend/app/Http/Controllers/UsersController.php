@@ -35,6 +35,7 @@ class UsersController extends Controller
                 'status'    => true,
                 'message'   => "Đã đăng nhập thành công!",
                 'ten_user'  => $user->name_user,
+                'user_id'   => $user->user_id,
                 'token'     => $token->plainTextToken,
             ], 200, ['Content-Type' => 'application/json']);
         } else {
@@ -138,7 +139,18 @@ class UsersController extends Controller
     }
     public function getData(Request $request)
     {
-        return response()->json($request->user());
+        $user = $request->user();
+        
+        return response()->json([
+            'status' => true,
+            'user' => [
+                'user_id' => $user->user_id,
+                'email' => $user->email,
+                'name_user' => $user->name_user,
+                'created_at' => $user->created_at,
+                'updated_at' => $user->updated_at
+            ]
+        ]);
     }
     public function quenMatKhau(Request $request)
     {

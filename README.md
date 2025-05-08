@@ -7,9 +7,16 @@
 - **Thư viện sách**: Lưu trữ, phân loại và quản lý sách theo danh mục
 - **Đọc sách**: Hỗ trợ đọc và quản lý tài liệu PDF
 - **Tìm kiếm**: Tìm kiếm nhanh sách và tài liệu theo tên, tác giả
-- **Hệ thống tài khoản**: Đăng ký, đăng nhập và quản lý tài khoản người dùng
+- **Hệ thống tài khoản**: 
+  - Đăng ký, đăng nhập và quản lý tài khoản người dùng
+  - Tự động đăng nhập (72 giờ)
+  - Đồng bộ trạng thái đăng nhập giữa các thiết bị
 - **Bookmark**: Lưu và quản lý sách yêu thích
-- **Theo dõi tiến trình đọc**: Tự động lưu và hiển thị tiến trình đọc sách
+- **Theo dõi tiến trình đọc**: 
+  - Tự động lưu và hiển thị tiến trình đọc sách
+  - Đồng bộ tiến trình giữa các thiết bị
+  - Hiển thị thống kê thời gian đọc
+  - Đánh dấu trang và ghi chú
 - **Nhập và Xử Lý Tệp:** Hỗ trợ các định dạng PDF, DOC; cho phép chỉnh sửa nội dung sau khi trích xuất
 - **Chuyển Văn Bản Thành Giọng Nói (TTS):** Đọc to nội dung sách với giọng nói tự nhiên
 - **Dịch Thuật:** Hỗ trợ dịch nội dung sách sang nhiều ngôn ngữ khác nhau
@@ -45,6 +52,16 @@
 ## 🗃️ Cơ Sở Dữ Liệu
 
 ![image](https://github.com/user-attachments/assets/52185ee6-812e-4f3b-af12-20f9f8e288d4)
+
+### Bảng user_sessions
+- Theo dõi phiên đăng nhập người dùng
+- Lưu token và thời gian hết hạn
+- Quản lý đăng nhập từ nhiều thiết bị
+
+### Bảng reading_progress
+- Lưu tiến trình đọc sách của người dùng
+- Theo dõi thời gian đọc và trang hiện tại
+- Lưu trữ đánh dấu trang và ghi chú
 
 ## ⚙️ Cài Đặt và Chạy Dự Án
 
@@ -151,9 +168,11 @@ npx expo start
 ## 🌐 API Endpoints
 
 ### Authentication
-- `POST /api/dang-nhap` - Đăng nhập
+- `POST /api/dang-nhap` - Đăng nhập (với tùy chọn tự động đăng nhập)
 - `POST /api/dang-ky` - Đăng ký
+- `POST /api/dang-xuat` - Đăng xuất
 - `POST /api/quen-mat-khau` - Quên mật khẩu
+- `GET /api/check-auth` - Kiểm tra trạng thái đăng nhập
 
 ### Books
 - `GET /api/books` - Lấy danh sách sách
@@ -168,6 +187,13 @@ npx expo start
 - `GET /api/user` - Lấy thông tin người dùng
 - `POST /api/doi-mat-khau` - Đổi mật khẩu
 - `POST /api/cap-nhat-thong-tin` - Cập nhật thông tin người dùng
+
+### Reading Progress
+- `GET /api/reading-progress/{bookId}` - Lấy tiến trình đọc sách
+- `POST /api/reading-progress/update` - Cập nhật tiến trình đọc
+- `GET /api/reading-stats` - Lấy thống kê đọc sách
+- `POST /api/bookmarks` - Thêm đánh dấu trang
+- `GET /api/bookmarks/{bookId}` - Lấy danh sách đánh dấu trang
 
 ## 📄 Hướng Dẫn Sử Dụng
 

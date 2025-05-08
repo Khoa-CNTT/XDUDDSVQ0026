@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 import { authService } from '../services/authService';
+import { getBookPdfViewUrl } from '../services/bookService';
 
 export default function BookDetailScreen() {
   const { id } = useLocalSearchParams();
@@ -237,22 +238,36 @@ export default function BookDetailScreen() {
     }
   };
 
-  const handleReadBook = () => {
+  const handleReadBook = async () => {
     if (!book) return;
     
-    // Navigate to PdfViewer with the book details
-    if (book.file_path) {
+    try {
+      setIsLoading(true);
+      
+      // Kiểm tra đăng nhập
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Lỗi', 'Bạn cần đăng nhập để đọc sách');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Không tạo URL PDF ở đây nữa
+      console.log('Opening book with ID:', id);
+      
+      // Chuyển đến BookViewer với bookId nhưng KHÔNG truyền pdfUrl
       router.push({
-        pathname: '/PdfViewer',
+        pathname: '/BookViewer',
         params: { 
-          pdfPath: book.file_path,
-          pdfTitle: book.title,
-          pdfId: id
+          bookId: id,
+          bookTitle: book.title
         }
       });
-    } else {
-      // If there's no direct PDF path, just show a message
-      Alert.alert('Thông báo', 'Sách này chưa có phiên bản PDF.');
+    } catch (error) {
+      console.error('Error opening book:', error);
+      Alert.alert('Lỗi', 'Không thể mở sách, vui lòng thử lại sau');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -382,19 +397,15 @@ export default function BookDetailScreen() {
         <Text className="text-black font-extrabold text-center text-xl ms-6">{book.price}</Text>
         <View className="flex-row">
           <TouchableOpacity 
-            className="bg-gray-500 rounded-md p-3 mr-2"
-            onPress={async () => {
-              const cleared = await clearCachedFile(id);
-              showToast(cleared ? 'Đã xóa bộ nhớ đệm!' : 'Không có bộ nhớ đệm!');
-            }}
-          >
-            {/* <Text className="text-white font-bold text-center">Xóa Cache</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
             className="bg-blue-500 rounded-md p-3 w-32"
             onPress={handleReadBook}
-          > */}
-            <Text className="text-white font-extrabold text-center text-xl">Đọc Ngay</Text>
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text className="text-white font-extrabold text-center text-xl">Đọc Ngay</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>

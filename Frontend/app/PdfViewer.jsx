@@ -7,6 +7,7 @@ import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { savePdfReadingProgress } from './services/pdfService';
 
 
 export default function PdfViewer() {
@@ -158,27 +159,48 @@ export default function PdfViewer() {
       // Update the saved percentage
       setSavedProgressPercentage(progressPercentage);
       
+      // Gọi API để lưu lên server
+      try {
+        const response = await savePdfReadingProgress(pdfId, currentPage, totalPages);
+        if (response.success) {
+          console.log(`📄 Đã lưu tiến độ đọc PDF lên server thành công: ${progressPercentage}%`);
+        } else {
+          console.warn(`📄 Không thể lưu tiến độ đọc PDF lên server: ${response.message || 'Lỗi không xác định'}`);
+        }
+      } catch (apiError) {
+        console.error('📄 Lỗi khi lưu tiến độ đọc lên server:', apiError);
+        // Tiếp tục sử dụng local storage nếu API lỗi
+      }
+      
       // Update recently viewed documents list to improve sync between screens
       try {
-        const recentlyViewedKey = 'recently_viewed_docs';
-        let recentlyViewed = [];
-        const recentlyViewedJson = await AsyncStorage.getItem(recentlyViewedKey);
+        // Lấy user_id để lưu riêng cho từng người dùng
+        const userId = await AsyncStorage.getItem('user_id');
         
-        if (recentlyViewedJson) {
-          recentlyViewed = JSON.parse(recentlyViewedJson);
+        if (userId) {
+          const recentlyViewedKey = `recently_viewed_docs_${userId}`;
+          let recentlyViewed = [];
+          const recentlyViewedJson = await AsyncStorage.getItem(recentlyViewedKey);
+          
+          if (recentlyViewedJson) {
+            recentlyViewed = JSON.parse(recentlyViewedJson);
+          }
+          
+          // Add current PDF to the top if not already there, or move to top if exists
+          const pdfIdStr = pdfId.toString();
+          recentlyViewed = recentlyViewed.filter(id => id !== pdfIdStr);
+          recentlyViewed.unshift(pdfIdStr);
+          
+          // Keep only the most recent 10 items
+          if (recentlyViewed.length > 10) {
+            recentlyViewed = recentlyViewed.slice(0, 10);
+          }
+          
+          await AsyncStorage.setItem(recentlyViewedKey, JSON.stringify(recentlyViewed));
+          console.log(`📄 Đã cập nhật danh sách PDF đã xem cho người dùng ${userId}`);
+        } else {
+          console.warn('📄 Không thể cập nhật danh sách PDF đã xem: không tìm thấy user_id');
         }
-        
-        // Add current PDF to the top if not already there, or move to top if exists
-        const pdfIdStr = pdfId.toString();
-        recentlyViewed = recentlyViewed.filter(id => id !== pdfIdStr);
-        recentlyViewed.unshift(pdfIdStr);
-        
-        // Keep only the most recent 10 items
-        if (recentlyViewed.length > 10) {
-          recentlyViewed = recentlyViewed.slice(0, 10);
-        }
-        
-        await AsyncStorage.setItem(recentlyViewedKey, JSON.stringify(recentlyViewed));
       } catch (recentError) {
         console.error('Error updating recently viewed list:', recentError);
       }
@@ -186,7 +208,11 @@ export default function PdfViewer() {
       // Force a refresh in the app state to ensure other screens pick up changes immediately
       await AsyncStorage.setItem('reading_progress_updated', new Date().toISOString());
       
-      // NOTE: Database saving functionality removed to avoid API errors
+      // Cập nhật theo user_id nếu có
+      const userId = await AsyncStorage.getItem('user_id');
+      if (userId) {
+        await AsyncStorage.setItem(`reading_progress_updated_${userId}`, new Date().toISOString());
+      }
      
     } catch (error) {
       console.error('Error saving reading progress:', error);

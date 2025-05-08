@@ -9,6 +9,8 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\PDFController;
 use App\Http\Controllers\DonateBookController;
 use App\Http\Controllers\UserBookPreferenceController;
+use App\Http\Controllers\BookHistoryController;
+use App\Http\Controllers\PdfHistoryController;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,6 +40,8 @@ Route::get('/books/search', [BookController::class, 'timKiem']);
 Route::get('/books/category/{categoryId}', [BookController::class, 'theoTheLoai']);
 Route::get('/books/author/{authorId}', [BookController::class, 'theoTacGia']);
 Route::get('/books/{id}', [BookController::class, 'chiTiet']);
+Route::get('/books/{id}/view-pdf', [BookController::class, 'viewPdf']);
+Route::get('/books/{bookId}/pdf', [BookController::class, 'viewPdf']);
 
 // Public Category routes
 Route::get('/categories', [CategoryController::class, 'danhSach']);
@@ -93,4 +97,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/books/{id}/save', [UserBookPreferenceController::class, 'luuSach']);
     Route::post('/books/{id}/favorite', [UserBookPreferenceController::class, 'yeuThichSach']);
     Route::get('/user-books', [UserBookPreferenceController::class, 'getUserBooks']);
+
+    // API cho lịch sử đọc sách
+    Route::get('/book-history', [BookHistoryController::class, 'getUserHistory']);
+    Route::post('/book-history', [BookHistoryController::class, 'updateHistory']);
+    
+    // API cho lịch sử đọc PDF
+    Route::get('/pdf-history', [PdfHistoryController::class, 'getUserHistory']);
+    Route::post('/pdf-history', [PdfHistoryController::class, 'updateHistory']);
 });

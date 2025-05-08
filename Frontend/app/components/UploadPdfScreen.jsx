@@ -43,7 +43,7 @@ export default function UploadPdfScreen() {
       });
       
       const responseText = await response.text();
-      console.log('Raw response from PDFs API:', responseText);
+      // console.log('Raw response from PDFs API:', responseText);
       
       let data;
       try {
@@ -53,7 +53,7 @@ export default function UploadPdfScreen() {
         throw new Error('Failed to parse server response. Please try again later.');
       }
       
-      console.log('PDFs data:', data);
+      // console.log('PDFs data:', data);
       
       if (data.success) {
         setPdfs(data.data);

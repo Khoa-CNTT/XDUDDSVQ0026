@@ -2,9 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config';
 
 // Đăng nhập
-export const login = async (email, password, deviceName = '') => {
+export const login = async (email, password, deviceName = '', enableAutoLogin = true) => {
   try {
     console.log('Sending login request to:', `${API_URL}/dang-nhap`);
+    console.log('Auto login enabled:', enableAutoLogin);
     
     const requestBody = { 
       email, 
@@ -42,6 +43,15 @@ export const login = async (email, password, deviceName = '') => {
       await AsyncStorage.setItem('token', data.token);
       await AsyncStorage.setItem('authToken', data.token);
       await AsyncStorage.setItem('email', email);
+      
+      // Lưu trạng thái tự động đăng nhập và thời gian đăng nhập
+      if (enableAutoLogin) {
+        await AsyncStorage.setItem('autoLogin', 'true');
+        await AsyncStorage.setItem('lastLoginTime', new Date().toISOString());
+      } else {
+        await AsyncStorage.removeItem('autoLogin');
+        await AsyncStorage.removeItem('lastLoginTime');
+      }
       
       // Lưu user_id nếu có
       if (data.user_id) {
@@ -117,6 +127,17 @@ export const register = async (userData) => {
     console.log('Register response data:', data);
 
     if (data.success || data.status) {
+      // Xóa tất cả thông tin đăng nhập cũ
+      await AsyncStorage.multiRemove([
+        'token',
+        'authToken',
+        'user',
+        'email',
+        'user_id',
+        'autoLogin',
+        'lastLoginTime'
+      ]);
+      
       return { success: true, message: data.message || 'Đăng ký thành công' };
     } else {
       throw new Error(data.message || 'Đăng ký thất bại');
@@ -130,46 +151,39 @@ export const register = async (userData) => {
 // Đăng xuất
 export const logout = async () => {
   try {
+    // Lấy token để gọi API đăng xuất
     const token = await AsyncStorage.getItem('token');
     
-    if (!token) {
-      throw new Error('Không tìm thấy token');
+    if (token) {
+      try {
+        // Gọi API đăng xuất
+        await fetch(`${API_URL}/dang-xuat`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+      } catch (apiError) {
+        console.error('Logout API error:', apiError);
+      }
     }
 
-    const response = await fetch(`${API_URL}/dang-xuat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
-    
     // Xóa tất cả thông tin đăng nhập
     await AsyncStorage.multiRemove([
       'token',
       'authToken',
       'user',
+      'user_id',
       'email',
-      'user_id'
+      'autoLogin',
+      'lastLoginTime'
     ]);
 
-    return { success: true, message: data.message || 'Đăng xuất thành công' };
+    return { success: true };
   } catch (error) {
     console.error('Logout error:', error);
-    
-    // Xóa tất cả thông tin đăng nhập dù có lỗi
-    await AsyncStorage.multiRemove([
-      'token',
-      'authToken',
-      'user',
-      'email',
-      'user_id'
-    ]);
-    
-    return { success: false, message: error.message };
+    return { success: false, error: error.message };
   }
 };
 
@@ -207,13 +221,30 @@ export const checkAuthStatus = async () => {
       return { isLoggedIn: false, error: `JSON Parse error: ${parseError.message}` };
     }
 
-    if (data.success) {
-      // Cập nhật thông tin user
-      const userData = {
-        ...data.user,
-        user_id: data.user.user_id || await AsyncStorage.getItem('user_id')
-      };
+    if (data.status && data.user) {
+      // Lấy user_id từ phản hồi API
+      const userId = data.user.user_id;
+      
+      if (!userId) {
+        console.error('API /user không trả về user_id. Vui lòng kiểm tra ứng dụng phía server.');
+        await AsyncStorage.multiRemove([
+          'token',
+          'authToken',
+          'user',
+          'email',
+          'user_id'
+        ]);
+        return { isLoggedIn: false, error: 'Không nhận được ID người dùng từ API' };
+      }
+      
+      // Cập nhật thông tin user và user_id
+      const userData = data.user;
+      
+      // Lưu user_id
+      await AsyncStorage.setItem('user_id', userId);
       await AsyncStorage.setItem('user', JSON.stringify(userData));
+      
+      console.log('Auth check successful, user_id:', userId);
       return { isLoggedIn: true, user: userData };
     } else {
       // Token không hợp lệ
@@ -292,90 +323,58 @@ export const getUserInfo = async () => {
   }
 };
 
-// Lấy thông tin đăng nhập trước đó
+// Kiểm tra thông tin đăng nhập trước đó
 export const getPreviousLoginInfo = async () => {
   try {
-    console.log('Getting previous login info...');
-    const token = await AsyncStorage.getItem('token');
-    const userString = await AsyncStorage.getItem('user');
-    const userId = await AsyncStorage.getItem('user_id');
-    
-    if (token) {
-      if (userString) {
-        try {
-          const user = JSON.parse(userString);
-          // Đảm bảo user_id được lưu
-          if (!user.user_id && userId) {
-            user.user_id = userId;
-            await AsyncStorage.setItem('user', JSON.stringify(user));
-          }
-          return { 
-            hasLogin: true, 
-            token, 
-            user 
-          };
-        } catch (parseError) {
-          console.error('Error parsing user data:', parseError);
-        }
-      }
-      
-      try {
-        const response = await fetch(`${API_URL}/user`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        const responseText = await response.text();
-        const data = JSON.parse(responseText);
-        
-        if (data.success && data.user) {
-          const userData = {
-            ...data.user,
-            user_id: data.user.user_id || userId
-          };
-          await AsyncStorage.setItem('user', JSON.stringify(userData));
-          if (userData.user_id) {
-            await AsyncStorage.setItem('user_id', userData.user_id);
-          }
-          return { 
-            hasLogin: true, 
-            token, 
-            user: userData 
-          };
-        }
-      } catch (apiError) {
-        console.error('Error getting user info from API:', apiError);
-      }
-      
-      const email = await AsyncStorage.getItem('email');
-      if (email) {
-        const user = { 
-          email,
-          user_id: userId
-        };
-        return { 
-          hasLogin: true, 
-          token, 
-          user 
-        };
-      }
-      
-      return { 
-        hasLogin: true, 
-        token, 
-        user: { 
-          name: 'Người dùng',
-          user_id: userId
-        } 
-      };
+    // Kiểm tra xem có đang bật tự động đăng nhập không
+    const autoLogin = await AsyncStorage.getItem('autoLogin');
+    if (autoLogin !== 'true') {
+      console.log('Auto login is disabled');
+      return { hasLogin: false };
     }
+
+    // Kiểm tra thời gian đăng nhập cuối
+    const lastLoginTime = await AsyncStorage.getItem('lastLoginTime');
+    if (!lastLoginTime) {
+      console.log('No last login time found');
+      return { hasLogin: false };
+    }
+
+    // Kiểm tra xem phiên đăng nhập có hết hạn chưa (72 giờ)
+    const lastLogin = new Date(lastLoginTime);
+    const now = new Date();
+    const hoursDiff = (now - lastLogin) / (1000 * 60 * 60);
     
-    return { hasLogin: false };
+    if (hoursDiff > 72) {
+      console.log('Login session expired');
+      // Xóa thông tin đăng nhập cũ
+      await AsyncStorage.multiRemove(['token', 'authToken', 'autoLogin', 'lastLoginTime']);
+      return { hasLogin: false, needReauth: true, message: 'Phiên đăng nhập đã hết hạn' };
+    }
+
+    // Lấy token và email
+    const [token, email] = await Promise.all([
+      AsyncStorage.getItem('token'),
+      AsyncStorage.getItem('email')
+    ]);
+
+    if (!token || !email) {
+      console.log('Missing token or email');
+      return { hasLogin: false };
+    }
+
+    // Lấy thông tin user
+    const userJson = await AsyncStorage.getItem('user');
+    const user = userJson ? JSON.parse(userJson) : null;
+
+    return {
+      hasLogin: true,
+      token,
+      email,
+      user
+    };
   } catch (error) {
-    console.error('Get previous login info error:', error);
+    console.error('Error checking previous login:', error);
     return { hasLogin: false, error: error.message };
   }
 };

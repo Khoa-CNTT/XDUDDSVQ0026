@@ -504,4 +504,54 @@ class BookController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * View PDF file of a book
+     */
+    public function viewPdf($id)
+    {
+        try {
+            $book = Book::findOrFail($id);
+            
+            if (!$book->file_path) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'File PDF không tồn tại cho sách này'
+                ], 404);
+            }
+            
+            // Xử lý đường dẫn đúng cách, loại bỏ /storage/ ở đầu nếu có
+            $file_path = $book->file_path;
+            if (strpos($file_path, '/storage/') === 0) {
+                $file_path = substr($file_path, 9); // Loại bỏ /storage/ ở đầu
+            }
+            
+            // Đường dẫn hoàn chỉnh
+            $filePath = public_path('storage/' . $file_path);
+            
+            // Debug
+            \Illuminate\Support\Facades\Log::info('PDF path: ' . $filePath);
+            
+            // Check if the file exists
+            if (!file_exists($filePath)) {
+                \Illuminate\Support\Facades\Log::error('File không tồn tại: ' . $filePath);
+                return response()->json([
+                    'status' => false,
+                    'message' => 'File PDF không tồn tại hoặc không thể truy cập'
+                ], 404);
+            }
+            
+            // Return the file with appropriate headers
+            return response()->file($filePath, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . basename($book->file_path) . '"'
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Lỗi khi hiển thị PDF: ' . $e->getMessage());
+            return response()->json([
+                'status' => false,
+                'message' => 'Lỗi khi hiển thị PDF: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 } 
