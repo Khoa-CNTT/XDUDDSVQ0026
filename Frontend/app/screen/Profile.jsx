@@ -101,11 +101,13 @@ export default function Profile() {
             />
 
             <View className="items-center">
-                <Image
-                    source={require('../../assets/images/profile.png')}
-                    className="w-[100px] h-[100px] rounded-full mt-6"
-                    resizeMode="cover"
-                />
+                <View className="w-[110px] h-[110px] rounded-full bg-white shadow-md justify-center items-center mt-6">
+                    <Image
+                        source={require('../../assets/images/profile1.png')}
+                        className="w-[100px] h-[100px] rounded-full"
+                        resizeMode="cover"
+                    />
+                </View>
                 
                 {isEditing ? (
                     <View className="flex-row items-center mt-4">
