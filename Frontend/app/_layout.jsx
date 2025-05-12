@@ -122,6 +122,21 @@ export default function AppLayout() {
             animation: 'slide_from_right'
         }}
        />
+       <Stack.Screen name="AllRecentlyReadBooks"
+        options={{
+            headerTransparent: false,
+            headerTitle: 'Sách Đã Đọc Gần Đây',
+            headerShown: false,
+            headerStyle: {
+              backgroundColor: '#fff',
+            },
+            headerTitleStyle: {
+              fontSize: 18,
+              fontWeight: 'bold',
+            },
+            animation: 'slide_from_right'
+        }}
+       />
     </Stack>
 
    ) ;
