@@ -115,10 +115,11 @@ export default function Charity() {
                 console.log('Including user_id in donation:', userId);
             }
             
-            formData.append('book_file', {
+            // Use 'file' key as expected by the backend
+            formData.append('file', {
                 uri: selectedFile.uri,
                 name: selectedFile.name,
-                type: selectedFile.mimeType
+                type: selectedFile.mimeType || 'application/pdf'
             });
 
             console.log('Sending donation with form data:', {
@@ -129,11 +130,13 @@ export default function Charity() {
                 file: selectedFile.name
             });
 
-            // Upload to server - no token required
+            // Tăng timeout cho request để tránh lỗi network timeout
             const response = await axios.post(`${API_URL}/donate-book`, formData, {
                 headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
+                    'Content-Type': 'multipart/form-data',
+                    'Accept': 'application/json'
+                },
+                timeout: 30000 // 30 seconds timeout
             });
 
             console.log('Donation response:', response.data);

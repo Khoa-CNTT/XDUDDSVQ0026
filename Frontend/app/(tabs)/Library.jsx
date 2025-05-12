@@ -333,19 +333,41 @@ export default function Library() {
         
         // Lọc theo định dạng (nếu có)
         if (selectedFormat) {
-          // Giả định: theo các file đuôi để lọc
+          // Cải thiện logic lọc định dạng file
           filteredDocs = filteredDocs.filter(doc => {
-            const fileName = doc.file_name?.toLowerCase() || '';
+            // Kiểm tra từ nhiều thuộc tính có thể chứa thông tin về tên file
+            const fileName = (
+              doc.file_name || 
+              doc.original_name || 
+              doc.file_path || 
+              doc.filename || 
+              ''
+            ).toLowerCase();
+            
+            // Kiểm tra kiểu MIME type nếu có
+            const mimeType = (doc.mime_type || '').toLowerCase();
             
             switch(selectedFormat) {
               case 'pdf':
-                return fileName.endsWith('.pdf');
+                return fileName.endsWith('.pdf') || 
+                       fileName.includes('.pdf') || 
+                       mimeType.includes('pdf');
               case 'epub':
-                return fileName.endsWith('.epub') || fileName.endsWith('.fb2');
+                return fileName.endsWith('.epub') || 
+                       fileName.endsWith('.fb2') || 
+                       fileName.includes('.epub') || 
+                       fileName.includes('.fb2') || 
+                       mimeType.includes('epub');
               case 'doc':
-                return fileName.endsWith('.doc') || fileName.endsWith('.docx');
+                return fileName.endsWith('.doc') || 
+                       fileName.endsWith('.docx') || 
+                       fileName.includes('.doc') || 
+                       mimeType.includes('word') || 
+                       mimeType.includes('doc');
               case 'txt':
-                return fileName.endsWith('.txt');
+                return fileName.endsWith('.txt') || 
+                       fileName.includes('.txt') || 
+                       mimeType.includes('text/plain');
               default:
                 return true;
             }

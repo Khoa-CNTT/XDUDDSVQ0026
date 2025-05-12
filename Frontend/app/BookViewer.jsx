@@ -828,7 +828,7 @@ export default function BookViewer() {
                     // Store the intended page to navigate to
                     const targetPage = currentPage;
                    
-                    logDebug('PDF đã tải thành công. Số trang: ' + pdfDoc.numPages);
+                    // logDebug('PDF đã tải thành công. Số trang: ' + pdfDoc.numPages);
                     window.ReactNativeWebView.postMessage('TOTAL_PAGES:' + pdfDoc.numPages);
                    
                     // Make sure currentPage is valid
