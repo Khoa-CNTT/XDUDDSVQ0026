@@ -699,10 +699,15 @@ export default function HomeScreen() {
           <View>
             <View className="flex-row justify-between items-center mb-4 mt-6 px-4">
               <Text className="text-[22px] font-bold">{item.title}</Text>
+              {processedBooks && processedBooks.length > 0 && (
+                <TouchableOpacity onPress={() => router.push('/AllRecentlyReadBooks')}>
+                  <Text className="text-blue-500 font-semibold">Xem tất cả</Text>
+                </TouchableOpacity>
+              )}
             </View>
             {processedBooks && processedBooks.length > 0 ? (
               <FlatList
-                data={processedBooks.slice(0, 5)}
+                data={processedBooks.slice(0, 4)}
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 renderItem={({ item, index }) => {
