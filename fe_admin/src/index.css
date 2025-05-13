@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom CSS for truncated text */
+@layer components {
+  /* Enhanced truncation with title tooltip on hover */
+  .truncate {
+    @apply overflow-hidden text-ellipsis whitespace-nowrap;
+  }
+
+  /* Multi-line truncation (for 2 lines) */
+  .truncate-2-lines {
+    @apply overflow-hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  /* Multi-line truncation (for 3 lines) */
+  .truncate-3-lines {
+    @apply overflow-hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  /* Hover effect for truncated text */
+  .truncate-hover:hover {
+    @apply overflow-visible whitespace-normal z-10 bg-white shadow-lg;
+  }
+}
