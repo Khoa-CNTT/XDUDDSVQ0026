@@ -151,7 +151,8 @@ export default function Charity() {
             console.error('Error donating book:', error);
             Alert.alert(
                 'Lỗi',
-                error.response?.data?.message || 'Có lỗi xảy ra khi tải lên sách. Vui lòng thử lại.'
+                error.response?.data?.message || 
+                (error.response?.data?.errors ? JSON.stringify(error.response.data.errors) : 'Có lỗi xảy ra khi tải lên sách. Vui lòng thử lại.')
             );
         } finally {
             setLoading(false);

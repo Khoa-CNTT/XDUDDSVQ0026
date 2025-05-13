@@ -24,7 +24,7 @@ class DonateBookController extends Controller
         // Validate request
         $validator = Validator::make($request->all(), [
             'title' => 'required|string|max:255',
-            'book_file' => 'required|file|mimes:pdf,epub',
+            'file' => 'required|file|mimes:pdf,epub',
             'name_user' => 'required|string|max:255',
             'email' => 'required|email',
         ]);
@@ -34,8 +34,8 @@ class DonateBookController extends Controller
         }
 
         // Handle file upload
-        if ($request->hasFile('book_file')) {
-            $file = $request->file('book_file');
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
             $filename = time() . '_' . $file->getClientOriginalName();
             
             // Store file in storage/app/public/donated_books directory
@@ -51,6 +51,7 @@ class DonateBookController extends Controller
                 'title' => $request->title,
                 'email' => $request->email,
                 'file_path' => $path,
+                'user_id' => $request->user_id,
             ]);
 
             return response()->json([
