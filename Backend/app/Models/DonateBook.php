@@ -14,6 +14,7 @@ class DonateBook extends Model
         'title',
         'email',
         'file_path',
+        'user_id',
     ];
 
     public function user()
