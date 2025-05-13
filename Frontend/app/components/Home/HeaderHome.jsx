@@ -29,7 +29,7 @@ const HeaderHome = () => {
     <View className="pt-2 pb-4 px-4">
       <View className="flex-row justify-between items-center mb-2">
         <View>
-          <Text className="text-4xl font-bold">Home</Text>
+          <Text className="text-4xl font-bold">Trang chủ</Text>
         </View>
         <TouchableOpacity 
           className="bg-gray-100 w-10 h-10 rounded-full justify-center items-center"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,15 +9,15 @@ import {
   StatusBar,
   RefreshControl,
   Image,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
-import { API_URL } from './config';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter, Stack } from "expo-router";
+import { API_URL } from "./config";
 
 // Category component
 const CategoryItem = ({ category, onPress, booksCount }) => (
-  <TouchableOpacity 
-    onPress={onPress} 
+  <TouchableOpacity
+    onPress={onPress}
     className="flex-row items-center p-4 bg-white rounded-xl mb-3 shadow-sm"
     style={{ elevation: 2 }}
   >
@@ -25,7 +25,9 @@ const CategoryItem = ({ category, onPress, booksCount }) => (
       <Ionicons name="book-outline" size={24} color="#ff5a5f" />
     </View>
     <View className="flex-1">
-      <Text className="text-lg font-bold text-gray-800">{category.name_category}</Text>
+      <Text className="text-lg font-bold text-gray-800">
+        {category.name_category}
+      </Text>
       <Text className="text-sm text-gray-500">{booksCount} cuốn sách</Text>
     </View>
     <Ionicons name="chevron-forward" size={24} color="#ccc" />
@@ -46,16 +48,16 @@ export default function Categories() {
       setIsLoading(true);
       const response = await fetch(`${API_URL}/categories`);
       const data = await response.json();
-      
+
       if (data.status && data.data) {
         setCategories(data.data);
         await fetchBookCounts(data.data);
       } else {
-        throw new Error('Không thể tải dữ liệu danh mục');
+        throw new Error("Không thể tải dữ liệu danh mục");
       }
     } catch (error) {
-      console.error('Error fetching categories:', error);
-      setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+      console.error("Error fetching categories:", error);
+      setError("Không thể tải dữ liệu, vui lòng thử lại sau");
     } finally {
       setIsLoading(false);
     }
@@ -65,27 +67,27 @@ export default function Categories() {
   const fetchBookCounts = async (categoriesList) => {
     try {
       const counts = {};
-      
+
       // For this example, we'll fetch all books and count them by category
       const response = await fetch(`${API_URL}/books`);
       const data = await response.json();
-      
+
       if (data.status && data.data) {
         // Group books by category
-        data.data.forEach(book => {
+        data.data.forEach((book) => {
           if (!counts[book.category_id]) {
             counts[book.category_id] = 0;
           }
           counts[book.category_id]++;
         });
-        
+
         setBookCounts(counts);
       }
     } catch (error) {
-      console.error('Error fetching book counts:', error);
+      console.error("Error fetching book counts:", error);
       // If we can't get counts, just set empty counts
       const emptyCounts = {};
-      categoriesList.forEach(cat => {
+      categoriesList.forEach((cat) => {
         emptyCounts[cat.category_id] = 0;
       });
       setBookCounts(emptyCounts);
@@ -102,11 +104,11 @@ export default function Categories() {
   // Handle category press
   const handleCategoryPress = (category) => {
     router.push({
-      pathname: '/CategoryBooks',
-      params: { 
-        categoryId: category.category_id, 
+      pathname: "/CategoryBooks",
+      params: {
+        categoryId: category.category_id,
         categoryName: category.name_category,
-      }
+      },
     });
   };
 
@@ -121,7 +123,9 @@ export default function Categories() {
       <SafeAreaView className="flex-1 justify-center items-center bg-white">
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <ActivityIndicator size="large" color="#ff5a5f" />
-        <Text className="mt-4 text-base text-gray-500">Đang tải danh mục...</Text>
+        <Text className="mt-4 text-base text-gray-500">
+          Đang tải danh mục...
+        </Text>
       </SafeAreaView>
     );
   }
@@ -132,8 +136,10 @@ export default function Categories() {
       <SafeAreaView className="flex-1 justify-center items-center bg-white p-5">
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <Ionicons name="alert-circle-outline" size={64} color="#ff5a5f" />
-        <Text className="mt-4 text-base text-gray-500 text-center">{error}</Text>
-        <TouchableOpacity 
+        <Text className="mt-4 text-base text-gray-500 text-center">
+          {error}
+        </Text>
+        <TouchableOpacity
           className="mt-6 px-6 py-3 bg-[#ff5a5f] rounded-lg"
           onPress={fetchCategories}
         >
@@ -145,15 +151,15 @@ export default function Categories() {
 
   return (
     <SafeAreaView className="flex-1 bg-gray-100">
-      <Stack.Screen 
+      <Stack.Screen
         options={{
-          title: 'Danh mục sách',
+          title: "Danh mục sách",
           headerBackTitleVisible: false,
         }}
       />
 
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      
+
       {/* Header banner */}
       <View className="bg-[#ff5a5f] p-5">
         <Text className="text-2xl font-bold text-white">Tất cả danh mục</Text>
@@ -161,17 +167,17 @@ export default function Categories() {
           Khám phá sách theo từng chủ đề yêu thích
         </Text>
       </View>
-      
+
       {/* Categories list */}
       <View className="flex-1 px-4 pt-4">
         {categories.length > 0 ? (
           <FlatList
             data={categories}
             renderItem={({ item }) => (
-              <CategoryItem 
-                category={item} 
+              <CategoryItem
+                category={item}
                 booksCount={bookCounts[item.category_id] || 0}
-                onPress={() => handleCategoryPress(item)} 
+                onPress={() => handleCategoryPress(item)}
               />
             )}
             keyExtractor={(item) => item.category_id.toString()}
@@ -181,7 +187,7 @@ export default function Categories() {
               <RefreshControl
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
-                colors={['#ff5a5f']}
+                colors={["#ff5a5f"]}
               />
             }
           />
@@ -196,4 +202,4 @@ export default function Categories() {
       </View>
     </SafeAreaView>
   );
-} 
+}

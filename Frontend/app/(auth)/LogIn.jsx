@@ -10,18 +10,17 @@ import {
   Platform,
   Modal,
 } from "react-native";
-import AntDesign from '@expo/vector-icons/AntDesign';
+import AntDesign from "@expo/vector-icons/AntDesign";
 import React, { useState, useEffect } from "react";
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config';
-import authService from '../services/authService';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import authService from "../services/authService";
 
 export default function LogIn() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isSecureTextEntry, setIsSecureTextEntry] = useState(true);
@@ -30,35 +29,42 @@ export default function LogIn() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Lỗi', 'Vui lòng nhập email và mật khẩu');
+      Alert.alert("Lỗi", "Vui lòng nhập email và mật khẩu");
       return;
     }
-  
+
     try {
       setLoading(true);
       // Use authService for login instead of direct fetch
-      const deviceName = Platform.OS === 'ios' ? 
-                        'iPhone' : 
-                        Platform.OS === 'android' ? 
-                        'Android Device' : 
-                        'Web Browser';
-      
+      const deviceName =
+        Platform.OS === "ios"
+          ? "iPhone"
+          : Platform.OS === "android"
+          ? "Android Device"
+          : "Web Browser";
+
       const result = await authService.login(email, password, deviceName);
-      
+
       if (result.success) {
-        console.log('Đăng nhập thành công!');
-        Alert.alert('Thành công', result.message, [
+        console.log("Đăng nhập thành công!");
+        Alert.alert("Thành công", result.message, [
           {
-            text: 'OK',
-            onPress: () => router.push('/(tabs)/Home')
-          }
+            text: "OK",
+            onPress: () => router.push("/(tabs)/Home"),
+          },
         ]);
       } else {
-        Alert.alert('Lỗi đăng nhập', result.message || 'Email hoặc mật khẩu không chính xác');
+        Alert.alert(
+          "Lỗi đăng nhập",
+          result.message || "Email hoặc mật khẩu không chính xác"
+        );
       }
     } catch (error) {
-      console.error('Lỗi đăng nhập:', error);
-      Alert.alert('Lỗi đăng nhập', error.message || 'Đã xảy ra lỗi khi đăng nhập');
+      console.error("Lỗi đăng nhập:", error);
+      Alert.alert(
+        "Lỗi đăng nhập",
+        error.message || "Đã xảy ra lỗi khi đăng nhập"
+      );
     } finally {
       setLoading(false);
     }
@@ -66,9 +72,9 @@ export default function LogIn() {
 
   const handleGoogleLogin = async () => {
     Alert.alert(
-      'Thông báo',
-      'Đăng nhập bằng Google hiện không khả dụng trong Expo Go. Vui lòng sử dụng email và mật khẩu.',
-      [{ text: 'OK' }]
+      "Thông báo",
+      "Đăng nhập bằng Google hiện không khả dụng trong Expo Go. Vui lòng sử dụng email và mật khẩu.",
+      [{ text: "OK" }]
     );
   };
 
@@ -76,37 +82,41 @@ export default function LogIn() {
     try {
       setLoading(true);
       const loginInfo = await authService.getPreviousLoginInfo();
-      
+
       if (loginInfo.hasLogin) {
         if (loginInfo.needReauth) {
           // Nếu cần đăng nhập lại, không thể đăng nhập tự động
           Alert.alert(
-            'Cần đăng nhập lại',
-            loginInfo.message || 'Vui lòng đăng nhập lại để cập nhật thông tin tài khoản.',
+            "Cần đăng nhập lại",
+            loginInfo.message ||
+              "Vui lòng đăng nhập lại để cập nhật thông tin tài khoản.",
             [
               {
-                text: 'OK',
+                text: "OK",
                 onPress: async () => {
                   // Xóa thông tin đăng nhập cũ để tránh lỗi
                   await AsyncStorage.multiRemove([
-                    'token', 'authToken', 'user', 'user_id'
+                    "token",
+                    "authToken",
+                    "user",
+                    "user_id",
                   ]);
                   setShowLoginModal(false);
-                }
-              }
+                },
+              },
             ]
           );
         } else {
-          console.log('Đăng nhập tự động thành công!');
+          console.log("Đăng nhập tự động thành công!");
           // Chuyển hướng đến trang Home
-          router.push('/(tabs)/Home');
+          router.push("/(tabs)/Home");
         }
       } else {
-        Alert.alert('Lỗi đăng nhập', 'Không tìm thấy thông tin đăng nhập');
+        Alert.alert("Lỗi đăng nhập", "Không tìm thấy thông tin đăng nhập");
       }
     } catch (error) {
-      console.error('Error during auto login:', error);
-      Alert.alert('Lỗi đăng nhập', 'Có lỗi xảy ra khi đăng nhập tự động');
+      console.error("Error during auto login:", error);
+      Alert.alert("Lỗi đăng nhập", "Có lỗi xảy ra khi đăng nhập tự động");
     } finally {
       setLoading(false);
       setShowLoginModal(false);
@@ -117,66 +127,70 @@ export default function LogIn() {
   useEffect(() => {
     const checkLoginStatus = async () => {
       try {
-        console.log('Checking previous login info...');
+        console.log("Checking previous login info...");
         // Kiểm tra thông tin đăng nhập trước đó
         const previousLoginInfo = await authService.getPreviousLoginInfo();
-        console.log('Previous login info:', previousLoginInfo);
-        
+        console.log("Previous login info:", previousLoginInfo);
+
         if (previousLoginInfo.hasLogin) {
           if (previousLoginInfo.needReauth) {
             // Có token nhưng cần đăng nhập lại vì user_id không hợp lệ
-            console.log('Detected temporary user ID. Re-login required.');
-            
+            console.log("Detected temporary user ID. Re-login required.");
+
             // Hiển thị thông báo về việc cần đăng nhập lại
             Alert.alert(
-              'Thông báo bảo mật',
-              previousLoginInfo.message || 'Vui lòng đăng nhập lại để cập nhật thông tin tài khoản.',
+              "Thông báo bảo mật",
+              previousLoginInfo.message ||
+                "Vui lòng đăng nhập lại để cập nhật thông tin tài khoản.",
               [
                 {
-                  text: 'OK',
+                  text: "OK",
                   onPress: async () => {
                     // Xóa thông tin đăng nhập cũ để tránh lỗi
                     await AsyncStorage.multiRemove([
-                      'token', 'authToken', 'user', 'user_id'
+                      "token",
+                      "authToken",
+                      "user",
+                      "user_id",
                     ]);
                     setShowLoginModal(false);
-                  }
-                }
+                  },
+                },
               ]
             );
-            
+
             // Lấy email cũ để điền sẵn vào form
-            const oldEmail = await AsyncStorage.getItem('email');
+            const oldEmail = await AsyncStorage.getItem("email");
             if (oldEmail) {
               setEmail(oldEmail);
             }
           } else {
             // Hiển thị modal xác nhận đăng nhập bình thường
-            console.log('Setting previous user:', previousLoginInfo.user);
+            console.log("Setting previous user:", previousLoginInfo.user);
             setPreviousUser(previousLoginInfo.user);
-            console.log('Setting showLoginModal to true');
+            console.log("Setting showLoginModal to true");
             setShowLoginModal(true);
-            console.log('Modal should be visible now');
+            console.log("Modal should be visible now");
           }
         } else {
           // Không có thông tin đăng nhập trước đó, không làm gì cả
-          console.log('No previous login found');
+          console.log("No previous login found");
         }
       } catch (error) {
-        console.error('Error checking previous login:', error);
+        console.error("Error checking previous login:", error);
         // Xóa token để đảm bảo an toàn
-        await AsyncStorage.removeItem('token');
-        await AsyncStorage.removeItem('user');
+        await AsyncStorage.removeItem("token");
+        await AsyncStorage.removeItem("user");
       }
     };
-    
-    console.log('Running checkLoginStatus useEffect');
+
+    console.log("Running checkLoginStatus useEffect");
     checkLoginStatus();
   }, []);
 
   // Add an effect to monitor modal state changes
   useEffect(() => {
-    console.log('Modal visible state changed:', showLoginModal);
+    console.log("Modal visible state changed:", showLoginModal);
   }, [showLoginModal]);
 
   return (
@@ -188,32 +202,42 @@ export default function LogIn() {
           transparent={true}
           visible={true}
           onRequestClose={() => {
-            console.log('Modal closed by system back');
+            console.log("Modal closed by system back");
             setShowLoginModal(false);
           }}
         >
-          <View className="flex-1 justify-center items-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <View className="bg-white p-5 rounded-2xl w-4/5 items-center" style={{ elevation: 10 }}>
-              <Text className="text-xl font-bold text-center mb-4">Xin chào!</Text>
-              <Text className="text-center mb-6">
-                Bạn muốn đăng nhập vào tài khoản {previousUser?.name || previousUser?.email || 'đã lưu'} tiếp tục?
+          <View
+            className="flex-1 justify-center items-center"
+            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+          >
+            <View
+              className="bg-white p-5 rounded-2xl w-4/5 items-center"
+              style={{ elevation: 10 }}
+            >
+              <Text className="text-xl font-bold text-center mb-4">
+                Xin chào!
               </Text>
-              
+              <Text className="text-center mb-6">
+                Bạn muốn đăng nhập vào tài khoản{" "}
+                {previousUser?.name || previousUser?.email || "đã lưu"} tiếp
+                tục?
+              </Text>
+
               <View className="flex-row w-full justify-around">
-                <TouchableOpacity 
+                <TouchableOpacity
                   className="bg-gray-200 py-2 px-6 rounded-xl"
                   onPress={() => {
-                    console.log('User pressed Decline');
+                    console.log("User pressed Decline");
                     setShowLoginModal(false);
                   }}
                 >
                   <Text className="font-semibold">Từ chối</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   className="bg-yellow-400 py-2 px-6 rounded-xl"
                   onPress={() => {
-                    console.log('User pressed Accept');
+                    console.log("User pressed Accept");
                     handleAutoLogin();
                   }}
                   disabled={loading}
@@ -235,8 +259,9 @@ export default function LogIn() {
         <SafeAreaView className="flex">
           <View className="flex-row justify-start mt-3">
             <TouchableOpacity
-              onPress={() => router.push('Landing')}
-              className="bg-yellow-400 p-2 rounded-tr-2xl ml-5 rounded-bl-2xl">
+              onPress={() => router.push("Landing")}
+              className="bg-yellow-400 p-2 rounded-tr-2xl ml-5 rounded-bl-2xl"
+            >
               <AntDesign name="back" size={24} color="black" />
             </TouchableOpacity>
           </View>
@@ -275,11 +300,15 @@ export default function LogIn() {
                 onPress={() => setIsSecureTextEntry(!isSecureTextEntry)}
               >
                 <Text className="text-black font-medium">
-                  {isSecureTextEntry ? <Ionicons name="eye" size={24} /> : <Ionicons name="eye-off" size={24} />}
+                  {isSecureTextEntry ? (
+                    <Ionicons name="eye" size={24} />
+                  ) : (
+                    <Ionicons name="eye-off" size={24} />
+                  )}
                 </Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               className="flex items-end mb-5"
               onPress={() => router.push("/(auth)/ForgotPassword")}
             >
@@ -302,7 +331,9 @@ export default function LogIn() {
             <View className="flex-row justify-center mt-5">
               <Text className="text-xl">bạn chưa có tài khoản? </Text>
               <TouchableOpacity onPress={() => router.push("/(auth)/SignUp")}>
-                <Text className="font-semibold text-yellow-400 text-xl">Đăng Ký</Text>
+                <Text className="font-semibold text-yellow-400 text-xl">
+                  Đăng Ký
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

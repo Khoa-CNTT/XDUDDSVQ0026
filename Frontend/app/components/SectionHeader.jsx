@@ -1,15 +1,15 @@
-import {View,Text,TouchableOpacity} from "react-native"
-import { useRouter } from "expo-router"
+import { View, Text, TouchableOpacity } from "react-native";
+import { useRouter } from "expo-router";
 
 const SectionHeader = ({ title, showSeeAll = true, type }) => {
-  const router = useRouter()
+  const router = useRouter();
 
   const handleSeeAll = () => {
     router.push({
-      pathname: '/AllDocuments',
-      params: { type }
-    })
-  }
+      pathname: "/AllDocuments",
+      params: { type },
+    });
+  };
 
   return (
     <View className="flex-row justify-between items-center mb-4 mt-6 px-4">
@@ -20,7 +20,7 @@ const SectionHeader = ({ title, showSeeAll = true, type }) => {
         </TouchableOpacity>
       )}
     </View>
-  )
-}
+  );
+};
 
-export default SectionHeader
+export default SectionHeader;

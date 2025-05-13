@@ -13,7 +13,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../config";
 import { useFocusEffect } from "expo-router";
-import { authService } from "../services/authService";
 import RenderBookItem from "../components/BookStore/RenderBookItem";
 export default function SavedScreen() {
   const [activeTab, setActiveTab] = useState("saved");
@@ -44,9 +43,9 @@ export default function SavedScreen() {
   useEffect(() => {
     const getUserId = async () => {
       try {
-        const userEmail = await AsyncStorage.getItem('user_email');
-        const userIdValue = await AsyncStorage.getItem('user_id');
-        
+        const userEmail = await AsyncStorage.getItem("user_email");
+        const userIdValue = await AsyncStorage.getItem("user_id");
+
         if (userIdValue) {
           console.log("📚 Using user ID:", userIdValue);
           setUserId(userIdValue);
@@ -63,11 +62,9 @@ export default function SavedScreen() {
         setUserId("guest");
       }
     };
-    
+
     getUserId();
   }, []);
-
-  
 
   // Thiết lập theo dõi thay đổi - chỉ cần làm mới dữ liệu từ API định kỳ
   const setupStorageMonitoring = () => {
@@ -166,78 +163,83 @@ export default function SavedScreen() {
   // Tải dữ liệu sách từ API
   const fetchBooksFromAPI = async (signal) => {
     try {
-        const token = await AsyncStorage.getItem('token');
-        if (!token) {
-            setError('Vui lòng đăng nhập để xem sách đã lưu');
-            return [];
-        }
-        const response = await fetch(
-            `${API_URL}/user-books`,
-            { 
-                signal,
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                }
-            }
-        );
-        if (!response.ok) {
-            if (response.status === 401) {
-                await AsyncStorage.multiRemove([
-                    'token',
-                    'authToken',
-                    'user',
-                    'email',
-                    'user_id'
-                ]);
-                setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
-                return [];
-            }
-            throw new Error(`API responded with status ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.status && data.data) {
-            const transformBook = (book) => ({
-                id: book.book_id,
-                title: book.name_book,
-                description: book.title,
-                image: typeof book.image === 'string' ? { uri: book.image } : require('../../assets/images/bia1.png'),
-                author: book.author ? book.author.name_author : 'Không rõ tác giả',
-                price: book.is_free ? 'Miễn phí' : `${book.price} ₫`,
-                genre: book.category ? book.category.name_category : 'Chưa phân loại',
-                pages: book.pages || '0',
-                publisher: book.publisher || 'NXB Trẻ',
-                year: book.year || '2023',
-                file_path: book.file_path,
-                is_saved: book.is_saved,
-                is_favorite: book.is_favorite
-            });
-            const savedBooks = (data.data.saved_books || []).map(transformBook);
-            const favoriteBooks = (data.data.favorite_books || []).map(transformBook);
-            setSavedBooks(savedBooks);
-            setFavoriteBooks(favoriteBooks);
-            savedIdsRef.current = savedBooks.map(book => book.id);
-            favoriteIdsRef.current = favoriteBooks.map(book => book.id);
-            console.log(`📚 Loaded ${savedBooks.length} saved books and ${favoriteBooks.length} favorite books`);
-        }
-        return [...(data.data.saved_books || []), ...(data.data.favorite_books || [])];
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.log('📚 Fetch was aborted');
-            return [];
-        }
-        console.error('📚 Error fetching books:', error);
-        setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        setError("Vui lòng đăng nhập để xem sách đã lưu");
         return [];
+      }
+      const response = await fetch(`${API_URL}/user-books`, {
+        signal,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          await AsyncStorage.multiRemove([
+            "token",
+            "authToken",
+            "user",
+            "email",
+            "user_id",
+          ]);
+          setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+          return [];
+        }
+        throw new Error(`API responded with status ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.status && data.data) {
+        const transformBook = (book) => ({
+          id: book.book_id,
+          title: book.name_book,
+          description: book.title,
+          image:
+            typeof book.image === "string"
+              ? { uri: book.image }
+              : require("../../assets/images/bia1.png"),
+          author: book.author ? book.author.name_author : "Không rõ tác giả",
+          price: book.is_free ? "Miễn phí" : `${book.price} ₫`,
+          genre: book.category ? book.category.name_category : "Chưa phân loại",
+          pages: book.pages || "0",
+          publisher: book.publisher || "NXB Trẻ",
+          year: book.year || "2023",
+          file_path: book.file_path,
+          is_saved: book.is_saved,
+          is_favorite: book.is_favorite,
+        });
+        const savedBooks = (data.data.saved_books || []).map(transformBook);
+        const favoriteBooks = (data.data.favorite_books || []).map(
+          transformBook
+        );
+        setSavedBooks(savedBooks);
+        setFavoriteBooks(favoriteBooks);
+        savedIdsRef.current = savedBooks.map((book) => book.id);
+        favoriteIdsRef.current = favoriteBooks.map((book) => book.id);
+        console.log(
+          `📚 Loaded ${savedBooks.length} saved books and ${favoriteBooks.length} favorite books`
+        );
+      }
+      return [
+        ...(data.data.saved_books || []),
+        ...(data.data.favorite_books || []),
+      ];
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.log("📚 Fetch was aborted");
+        return [];
+      }
+      console.error("📚 Error fetching books:", error);
+      setError("Không thể tải dữ liệu, vui lòng thử lại sau");
+      return [];
     }
   };
 
   // Tìm sách dựa trên danh sách ID - được tối ưu hóa để xử lý nhiều loại ID
   const findBooksByIds = (bookIds) => {
-    console.log(
-      `📚 Finding books from ${apiBooks.length} available books`
-    );
+    console.log(`📚 Finding books from ${apiBooks.length} available books`);
 
     // Debug: In ra một vài ID sách đầu tiên để kiểm tra
     if (apiBooks.length > 0) {
@@ -367,7 +369,7 @@ export default function SavedScreen() {
 
       // Làm mới dữ liệu trực tiếp từ API - không cần tải lại saved/favorite
       await fetchBooksFromAPI(controller.signal);
-      
+
       // Dữ liệu đã được cập nhật trong fetchBooksFromAPI
     } catch (error) {
       if (error.name === "AbortError") {
@@ -438,7 +440,7 @@ export default function SavedScreen() {
   useFocusEffect(
     React.useCallback(() => {
       if (!userId) return;
-      
+
       console.log("📚 Saved screen focused");
       isMountedRef.current = true;
 
@@ -506,7 +508,7 @@ export default function SavedScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-        <Text className="text-4xl font-bold mt-2 px-4">Sách của tôi</Text>
+      <Text className="text-4xl font-bold mt-2 px-4">Sách của tôi</Text>
 
       <View className="flex-row border-b border-gray-200 mb-2">
         <TabButton
