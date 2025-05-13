@@ -1,31 +1,35 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import { API_URL } from '../config';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
+import { API_URL } from "../config";
 
 // Thêm hàm getUserId riêng cho pdfService
 const getUserId = async () => {
   try {
     // Lấy trực tiếp user_id (cách chính thức)
-    const userId = await AsyncStorage.getItem('user_id');
+    const userId = await AsyncStorage.getItem("user_id");
     if (userId) {
       return userId;
     }
-    
-    console.error('❌ ERROR: Không tìm thấy user_id trong bộ nhớ!');
-    console.error('❌ Người dùng cần đăng xuất và đăng nhập lại để nhận user_id từ server');
-    
+
+    console.error("❌ ERROR: Không tìm thấy user_id trong bộ nhớ!");
+    console.error(
+      "❌ Người dùng cần đăng xuất và đăng nhập lại để nhận user_id từ server"
+    );
+
     // Thử kiểm tra token
-    const token = await AsyncStorage.getItem('token');
+    const token = await AsyncStorage.getItem("token");
     if (!token) {
-      console.error('❌ Token cũng không tồn tại, người dùng chưa đăng nhập');
+      console.error("❌ Token cũng không tồn tại, người dùng chưa đăng nhập");
     } else {
-      console.error('❌ Token tồn tại nhưng user_id không được lưu, API có thể không trả về user_id');
+      console.error(
+        "❌ Token tồn tại nhưng user_id không được lưu, API có thể không trả về user_id"
+      );
     }
-    
+
     // Trả về null để báo hiệu lỗi
     return null;
   } catch (error) {
-    console.error('Error getting user ID:', error);
+    console.error("Error getting user ID:", error);
     return null;
   }
 };
@@ -33,75 +37,79 @@ const getUserId = async () => {
 // Lấy danh sách PDF
 export const getAllPDFs = async () => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    
+    const token = await AsyncStorage.getItem("token");
+
     if (!token) {
-      throw new Error('Unauthorized. Please login.');
+      throw new Error("Unauthorized. Please login.");
     }
-    
+
     const response = await fetch(`${API_URL}/pdfs`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     });
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
       return { success: true, data: data.data };
     } else {
-      throw new Error(data.message || 'Failed to fetch PDFs');
+      throw new Error(data.message || "Failed to fetch PDFs");
     }
   } catch (error) {
-    console.error('Get PDFs error:', error);
+    console.error("Get PDFs error:", error);
     return { success: false, message: error.message };
   }
 };
 
 // Tải lên PDF
-export const uploadPDF = async (fileUri, fileName, title, description = '') => {
+export const uploadPDF = async (fileUri, fileName, title, description = "") => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    
+    const token = await AsyncStorage.getItem("token");
+
     if (!token) {
-      throw new Error('Unauthorized. Please login.');
+      throw new Error("Unauthorized. Please login.");
     }
-    
+
     // Tạo FormData
     const formData = new FormData();
-    formData.append('file', {
+    formData.append("file", {
       uri: fileUri,
       name: fileName,
-      type: 'application/pdf'
+      type: "application/pdf",
     });
-    
-    formData.append('title', title || fileName);
-    
+
+    formData.append("title", title || fileName);
+
     if (description) {
-      formData.append('description', description);
+      formData.append("description", description);
     }
-    
+
     const response = await fetch(`${API_URL}/pdfs/upload`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'multipart/form-data',
-        'Authorization': `Bearer ${token}`
+        Accept: "application/json",
+        "Content-Type": "multipart/form-data",
+        Authorization: `Bearer ${token}`,
       },
-      body: formData
+      body: formData,
     });
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
-      return { success: true, data: data.data, message: 'PDF uploaded successfully' };
+      return {
+        success: true,
+        data: data.data,
+        message: "PDF uploaded successfully",
+      };
     } else {
-      throw new Error(data.message || 'Failed to upload PDF');
+      throw new Error(data.message || "Failed to upload PDF");
     }
   } catch (error) {
-    console.error('Upload PDF error:', error);
+    console.error("Upload PDF error:", error);
     return { success: false, message: error.message };
   }
 };
@@ -109,29 +117,29 @@ export const uploadPDF = async (fileUri, fileName, title, description = '') => {
 // Lấy chi tiết PDF
 export const getPDFDetails = async (pdfId) => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    
+    const token = await AsyncStorage.getItem("token");
+
     if (!token) {
-      throw new Error('Unauthorized. Please login.');
+      throw new Error("Unauthorized. Please login.");
     }
-    
+
     const response = await fetch(`${API_URL}/pdfs/${pdfId}`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     });
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
       return { success: true, data: data.data };
     } else {
-      throw new Error(data.message || 'Failed to fetch PDF details');
+      throw new Error(data.message || "Failed to fetch PDF details");
     }
   } catch (error) {
-    console.error('Get PDF details error:', error);
+    console.error("Get PDF details error:", error);
     return { success: false, message: error.message };
   }
 };
@@ -139,31 +147,35 @@ export const getPDFDetails = async (pdfId) => {
 // Cập nhật thông tin PDF
 export const updatePDF = async (pdfId, updateData) => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    
+    const token = await AsyncStorage.getItem("token");
+
     if (!token) {
-      throw new Error('Unauthorized. Please login.');
+      throw new Error("Unauthorized. Please login.");
     }
-    
+
     const response = await fetch(`${API_URL}/pdfs/${pdfId}`, {
-      method: 'PUT',
+      method: "PUT",
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(updateData)
+      body: JSON.stringify(updateData),
     });
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
-      return { success: true, data: data.data, message: 'PDF updated successfully' };
+      return {
+        success: true,
+        data: data.data,
+        message: "PDF updated successfully",
+      };
     } else {
-      throw new Error(data.message || 'Failed to update PDF');
+      throw new Error(data.message || "Failed to update PDF");
     }
   } catch (error) {
-    console.error('Update PDF error:', error);
+    console.error("Update PDF error:", error);
     return { success: false, message: error.message };
   }
 };
@@ -171,29 +183,29 @@ export const updatePDF = async (pdfId, updateData) => {
 // Xóa PDF
 export const deletePDF = async (pdfId) => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    
+    const token = await AsyncStorage.getItem("token");
+
     if (!token) {
-      throw new Error('Unauthorized. Please login.');
+      throw new Error("Unauthorized. Please login.");
     }
-    
+
     const response = await fetch(`${API_URL}/pdfs/${pdfId}`, {
-      method: 'DELETE',
+      method: "DELETE",
       headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     });
-    
+
     const data = await response.json();
-    
+
     if (data.success) {
-      return { success: true, message: 'PDF deleted successfully' };
+      return { success: true, message: "PDF deleted successfully" };
     } else {
-      throw new Error(data.message || 'Failed to delete PDF');
+      throw new Error(data.message || "Failed to delete PDF");
     }
   } catch (error) {
-    console.error('Delete PDF error:', error);
+    console.error("Delete PDF error:", error);
     return { success: false, message: error.message };
   }
 };
@@ -201,123 +213,140 @@ export const deletePDF = async (pdfId) => {
 // Tải PDF từ server
 export const downloadPDF = async (pdfId, customFileName = null) => {
   try {
-    const token = await AsyncStorage.getItem('token');
-    
+    const token = await AsyncStorage.getItem("token");
+
     if (!token) {
-      throw new Error('Unauthorized. Please login.');
+      throw new Error("Unauthorized. Please login.");
     }
-    
+
     // Lấy thông tin PDF trước khi tải
     const pdfDetails = await getPDFDetails(pdfId);
-    
+
     if (!pdfDetails.success) {
-      throw new Error('Failed to get PDF details for download');
+      throw new Error("Failed to get PDF details for download");
     }
-    
-    const fileName = customFileName || pdfDetails.data.title || `pdf_${pdfId}.pdf`;
+
+    const fileName =
+      customFileName || pdfDetails.data.title || `pdf_${pdfId}.pdf`;
     const fileLocation = `${FileSystem.documentDirectory}${fileName}.pdf`;
-    
+
     // Kiểm tra xem file đã tồn tại chưa
     const fileInfo = await FileSystem.getInfoAsync(fileLocation);
-    
+
     if (fileInfo.exists) {
-      return { success: true, uri: fileInfo.uri, message: 'File already exists' };
+      return {
+        success: true,
+        uri: fileInfo.uri,
+        message: "File already exists",
+      };
     }
-    
+
     // Bắt đầu tải file
     const downloadResumable = FileSystem.createDownloadResumable(
       `${API_URL}/pdfs/${pdfId}/download`,
       fileLocation,
       {
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       }
     );
-    
+
     const { uri } = await downloadResumable.downloadAsync();
-    
-    return { success: true, uri, message: 'PDF downloaded successfully' };
+
+    return { success: true, uri, message: "PDF downloaded successfully" };
   } catch (error) {
-    console.error('Download PDF error:', error);
+    console.error("Download PDF error:", error);
     return { success: false, message: error.message };
   }
 };
 
 // Lưu tiến độ đọc PDF lên server
-export const savePdfReadingProgress = async (pdfId, currentPage, totalPages) => {
+export const savePdfReadingProgress = async (
+  pdfId,
+  currentPage,
+  totalPages
+) => {
   try {
     const userId = await getUserId();
     if (!userId) {
-      console.log('❌ Không thể lưu tiến độ: không có user_id');
-      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+      console.log("❌ Không thể lưu tiến độ: không có user_id");
+      return { success: false, error: "USER_NOT_AUTHENTICATED" };
     }
-    
-    const token = await AsyncStorage.getItem('token');
+
+    const token = await AsyncStorage.getItem("token");
     if (!token) {
-      console.log('❌ Không thể lưu tiến độ: không có token');
-      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+      console.log("❌ Không thể lưu tiến độ: không có token");
+      return { success: false, error: "USER_NOT_AUTHENTICATED" };
     }
 
     // Validate pdfId
-    if (!pdfId || typeof pdfId !== 'string') {
-      console.error('❌ pdf_id không hợp lệ:', pdfId);
-      return { success: false, error: 'INVALID_PDF_ID', message: 'ID tài liệu không hợp lệ' };
+    if (!pdfId || typeof pdfId !== "string") {
+      console.error("❌ pdf_id không hợp lệ:", pdfId);
+      return {
+        success: false,
+        error: "INVALID_PDF_ID",
+        message: "ID tài liệu không hợp lệ",
+      };
     }
-    
+
     // Parse và validate các tham số
     const currentPageInt = parseInt(currentPage, 10) || 1;
     const totalPagesInt = parseInt(totalPages, 10) || 1;
     const percentage = Math.floor((currentPageInt / totalPagesInt) * 100) || 0;
-    
+
     // Lưu thông tin tiến độ vào local storage để hoạt động offline
-    const progress = { 
-      page: currentPageInt, 
-      total: totalPagesInt, 
-      percentage, 
-      timestamp: new Date().toISOString() 
+    const progress = {
+      page: currentPageInt,
+      total: totalPagesInt,
+      percentage,
+      timestamp: new Date().toISOString(),
     };
-    
+
     const key = `pdf_progress_${pdfId}`;
     await AsyncStorage.setItem(key, JSON.stringify(progress));
-    
-    console.log('📄 Gửi dữ liệu đọc PDF lên server:', {
+
+    console.log("📄 Gửi dữ liệu đọc PDF lên server:", {
       pdf_id: pdfId,
       current_page: currentPageInt,
       total_pages: totalPagesInt,
-      percentage: percentage
+      percentage: percentage,
     });
-    
+
     // Gửi lên server
     const response = await fetch(`${API_URL}/pdf-history`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         pdf_id: pdfId,
         current_page: currentPageInt,
         total_pages: totalPagesInt,
-        percentage: percentage
-      })
+        percentage: percentage,
+      }),
     });
-    
+
     const data = await response.json();
-    
+
     if (data.status) {
-      console.log('📄 Đã đồng bộ tiến độ đọc PDF lên server');
-      console.log(`📄 Đã lưu tiến độ đọc PDF lên server thành công: ${percentage}%`);
-      console.log(`📄 Đã cập nhật danh sách PDF đã xem cho người dùng ${userId}`);
+      console.log("📄 Đã đồng bộ tiến độ đọc PDF lên server");
+      console.log(
+        `📄 Đã lưu tiến độ đọc PDF lên server thành công: ${percentage}%`
+      );
+      console.log(
+        `📄 Đã cập nhật danh sách PDF đã xem cho người dùng ${userId}`
+      );
       return { success: true, data: data.data };
     } else {
-      console.error('❌ Lỗi khi đồng bộ tiến độ đọc PDF:', data.message);
-      return { success: false, error: 'SERVER_ERROR', message: data.message };
+      console.error("❌ Lỗi khi đồng bộ tiến độ đọc PDF:", data.message);
+      return { success: false, error: "SERVER_ERROR", message: data.message };
     }
   } catch (error) {
-    console.error('Error saving PDF reading progress:', error);
-    return { success: false, error: 'NETWORK_ERROR', message: error.message };
+    console.error("Error saving PDF reading progress:", error);
+    return { success: false, error: "NETWORK_ERROR", message: error.message };
   }
 };
 
@@ -326,56 +355,67 @@ export const getRecentlyViewedPdfs = async () => {
   try {
     const userId = await getUserId();
     if (!userId) {
-      console.log('❌ Không thể lấy danh sách tài liệu đã xem: không có user_id');
-      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+      console.log(
+        "❌ Không thể lấy danh sách tài liệu đã xem: không có user_id"
+      );
+      return { success: false, error: "USER_NOT_AUTHENTICATED" };
     }
-    
-    const token = await AsyncStorage.getItem('token');
+
+    const token = await AsyncStorage.getItem("token");
     if (!token) {
-      console.log('❌ Không thể lấy danh sách tài liệu đã xem: không có token');
-      return { success: false, error: 'USER_NOT_AUTHENTICATED' };
+      console.log("❌ Không thể lấy danh sách tài liệu đã xem: không có token");
+      return { success: false, error: "USER_NOT_AUTHENTICATED" };
     }
-    
-    console.log('📄 Đang lấy danh sách tài liệu đã xem cho người dùng:', userId);
-    
+
+    console.log(
+      "📄 Đang lấy danh sách tài liệu đã xem cho người dùng:",
+      userId
+    );
+
     // Lấy từ API
     const response = await fetch(`${API_URL}/pdf-history`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     });
-    
+
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('❌ Lỗi khi lấy danh sách tài liệu đã xem:', errorData.message);
-      return { 
-        success: false, 
-        error: 'API_ERROR', 
-        message: errorData.message || `HTTP error! status: ${response.status}` 
+      console.error(
+        "❌ Lỗi khi lấy danh sách tài liệu đã xem:",
+        errorData.message
+      );
+      return {
+        success: false,
+        error: "API_ERROR",
+        message: errorData.message || `HTTP error! status: ${response.status}`,
       };
     }
-    
+
     const data = await response.json();
-    
+
     if (data.status && Array.isArray(data.data)) {
       console.log(`📄 Đã lấy ${data.data.length} tài liệu đã xem từ server`);
       return { success: true, data: data.data };
     } else {
-      console.error('❌ Lỗi khi lấy danh sách tài liệu đã xem:', data.message || 'Không có dữ liệu');
-      return { 
-        success: false, 
-        error: 'INVALID_RESPONSE', 
-        message: data.message || 'Dữ liệu không hợp lệ' 
+      console.error(
+        "❌ Lỗi khi lấy danh sách tài liệu đã xem:",
+        data.message || "Không có dữ liệu"
+      );
+      return {
+        success: false,
+        error: "INVALID_RESPONSE",
+        message: data.message || "Dữ liệu không hợp lệ",
       };
     }
   } catch (error) {
-    console.error('Error getting recently viewed PDFs:', error);
-    return { 
-      success: false, 
-      error: 'NETWORK_ERROR', 
-      message: error.message || 'Lỗi kết nối mạng' 
+    console.error("Error getting recently viewed PDFs:", error);
+    return {
+      success: false,
+      error: "NETWORK_ERROR",
+      message: error.message || "Lỗi kết nối mạng",
     };
   }
 };
@@ -389,8 +429,8 @@ const pdfService = {
   deletePDF,
   downloadPDF,
   savePdfReadingProgress,
-  getRecentlyViewedPdfs
+  getRecentlyViewedPdfs,
 };
 
 // Export default để sửa lỗi "missing required default export"
-export default pdfService; 
+export default pdfService;

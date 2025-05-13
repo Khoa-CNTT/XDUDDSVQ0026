@@ -93,7 +93,7 @@ const AnimatedHeader = ({
             {title}
           </Animated.Text>
         </View>
-        
+
         {/* Actions container - đặt phía góc phải */}
         <View className="absolute right-4 top-0 h-full justify-center flex-row items-center">
           {rightActions ? (
@@ -109,7 +109,7 @@ const AnimatedHeader = ({
             </View>
           )}
         </View>
-        
+
         {/* Left actions nếu có */}
         {leftActions && (
           <View className="absolute left-4 bottom-0 h-1/2 justify-center">
@@ -125,7 +125,7 @@ const AnimatedHeader = ({
           opacity: centerHeaderOpacity,
           transform: [{ scale: centerHeaderScale }],
           height: HEADER_HEIGHT,
-          pointerEvents: 'none',
+          pointerEvents: "none",
         }}
       >
         <View className="flex-row justify-center items-center h-full">
@@ -153,4 +153,4 @@ const AnimatedHeader = ({
   );
 };
 
-export default AnimatedHeader; 
+export default AnimatedHeader;

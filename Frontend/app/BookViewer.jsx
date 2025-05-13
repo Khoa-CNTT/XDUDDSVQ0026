@@ -1,47 +1,76 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, TouchableOpacity, Platform, Alert, Dimensions, FlatList, ScrollView } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { WebView } from 'react-native-webview';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import { API_URL } from './config';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import { saveBookReadingProgress, getBookReadingProgress, getBookPdfViewUrl, addToRecentlyViewedBooks } from './services/bookService';
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  Text,
+  TouchableOpacity,
+  Platform,
+  Alert,
+  Dimensions,
+  FlatList,
+  ScrollView,
+} from "react-native";
+import { useLocalSearchParams, useRouter, Stack } from "expo-router";
+import { WebView } from "react-native-webview";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
+import { API_URL } from "./config";
+import Icon from "react-native-vector-icons/MaterialIcons";
+import {
+  saveBookReadingProgress,
+  getBookReadingProgress,
+  getBookPdfViewUrl,
+  addToRecentlyViewedBooks,
+} from "./services/bookService";
 
 export default function BookViewer() {
-  const { bookId, bookTitle, initialPage, pdfUrl: directPdfUrl } = useLocalSearchParams();
+  const {
+    bookId,
+    bookTitle,
+    initialPage,
+    pdfUrl: directPdfUrl,
+  } = useLocalSearchParams();
   const router = useRouter();
   const webViewRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(initialPage ? parseInt(initialPage, 10) : 1);
+  const [currentPage, setCurrentPage] = useState(
+    initialPage ? parseInt(initialPage, 10) : 1
+  );
   const [totalPages, setTotalPages] = useState(1);
   const [readingProgress, setReadingProgress] = useState(0);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [bottomMenuVisible, setBottomMenuVisible] = useState(true);
   const [bookInfo, setBookInfo] = useState(null);
-  const [htmlContent, setHtmlContent] = useState('');
-  const [pdfViewUrl, setPdfViewUrl] = useState('');
+  const [htmlContent, setHtmlContent] = useState("");
+  const [pdfViewUrl, setPdfViewUrl] = useState("");
   const [fileUri, setFileUri] = useState(null);
-  
+
   // Thêm states cho menu
   const [showMenu, setShowMenu] = useState(false);
   const [chapters, setChapters] = useState([]);
-  const [activeTab, setActiveTab] = useState('chapters');
-  
+  const [activeTab, setActiveTab] = useState("chapters");
+
   // Reference để theo dõi đã load PDF chưa và đã extract chapters chưa
   const pdfLoadedRef = useRef(false);
   const loadedChapters = useRef(false);
-  
+
   // Get screen dimensions for better PDF scaling
-  const screenWidth = Dimensions.get('window').width;
-  const screenHeight = Dimensions.get('window').height;
+  const screenWidth = Dimensions.get("window").width;
+  const screenHeight = Dimensions.get("window").height;
 
   useEffect(() => {
-    console.log(`BookViewer initialized with bookId: ${bookId}, initialPage: ${initialPage || 1}`);
+    console.log(
+      `BookViewer initialized with bookId: ${bookId}, initialPage: ${
+        initialPage || 1
+      }`
+    );
     // Ghi log directPdfUrl nhưng không sử dụng nó trực tiếp
     if (directPdfUrl) {
-      console.log(`Direct PDF URL provided but will be ignored for security: ${directPdfUrl}`);
+      console.log(
+        `Direct PDF URL provided but will be ignored for security: ${directPdfUrl}`
+      );
     }
     loadBook();
   }, [bookId, initialPage]);
@@ -50,29 +79,31 @@ export default function BookViewer() {
   useEffect(() => {
     if (bookId && totalPages > 1) {
       saveReadingProgress();
-      
+
       // Calculate reading progress percentage - ensure we don't get 0 for small values
-      const progress = Math.floor((currentPage / totalPages * 100) || 0);
-      
+      const progress = Math.floor((currentPage / totalPages) * 100 || 0);
+
       // Update progress if value is valid
       if (!isNaN(progress)) {
         setReadingProgress(progress);
       }
-      
-      console.log(`Progress updated: ${progress}% (Page ${currentPage}/${totalPages})`);
+
+      console.log(
+        `Progress updated: ${progress}% (Page ${currentPage}/${totalPages})`
+      );
     }
   }, [currentPage, totalPages, bookId]);
 
   // Xác định chapter hiện tại dựa trên trang hiện tại
   const currentChapter = useMemo(() => {
     if (!chapters || chapters.length === 0) return null;
-    
+
     // Sắp xếp chapters theo số trang
     const sortedChapters = [...chapters].sort((a, b) => a.page - b.page);
-    
+
     // Tìm chapter hiện tại dựa trên trang
     let foundChapter = sortedChapters[0]; // Mặc định là chapter đầu tiên
-    
+
     for (let i = 0; i < sortedChapters.length; i++) {
       if (currentPage >= sortedChapters[i].page) {
         foundChapter = sortedChapters[i];
@@ -80,10 +111,10 @@ export default function BookViewer() {
         break; // Dừng khi tìm thấy chapter có số trang lớn hơn trang hiện tại
       }
     }
-    
+
     return foundChapter;
   }, [chapters, currentPage]);
-  
+
   // Cập nhật useEffect để tạo chapters khi biết số trang
   useEffect(() => {
     if (totalPages > 0 && !loadedChapters.current) {
@@ -95,92 +126,101 @@ export default function BookViewer() {
   // Tạo chapters tự động dựa trên số trang
   const extractChapters = () => {
     if (totalPages <= 0) return;
-    
-    console.log('Tạo chapters tự động dựa trên số trang');
-    
+
+    console.log("Tạo chapters tự động dựa trên số trang");
+
     const autoChapters = [];
     // Khoảng cách giữa các chapter, tối đa 10 chapter hoặc khoảng 10 trang/chapter
     const chapterInterval = Math.max(1, Math.ceil(totalPages / 10));
-    
+
     for (let i = 1; i <= totalPages; i += chapterInterval) {
       autoChapters.push({
         id: autoChapters.length + 1,
         title: `Trang ${i}`,
-        page: i
+        page: i,
       });
     }
-    
-    console.log(`Created ${autoChapters.length} chapters with interval ${chapterInterval}`);
+
+    console.log(
+      `Created ${autoChapters.length} chapters with interval ${chapterInterval}`
+    );
     setChapters(autoChapters);
     loadedChapters.current = true;
   };
-  
+
   // Log khi chapter hiện tại thay đổi (để debug)
   useEffect(() => {
     if (currentChapter) {
-      console.log(`Current chapter: ${currentChapter.title} (Page ${currentChapter.page})`);
+      console.log(
+        `Current chapter: ${currentChapter.title} (Page ${currentChapter.page})`
+      );
     }
   }, [currentChapter]);
 
   const loadReadingProgress = async () => {
     if (!bookId) return;
-    
+
     try {
       // Sử dụng hàm mới từ bookService
       const response = await getBookReadingProgress(bookId);
-      
+
       if (response.success && response.data) {
         const progress = response.data;
         const page = parseInt(progress.page, 10) || 1;
         const total = parseInt(progress.total, 10) || 1;
-        
-        console.log(`Loaded reading progress: page ${page}/${total}, percentage: ${progress.percentage}%`);
-        
+
+        console.log(
+          `Loaded reading progress: page ${page}/${total}, percentage: ${progress.percentage}%`
+        );
+
         setCurrentPage(page);
         setTotalPages(total);
-        
+
         // Set progress percentage
-        const progressPercent = progress.percentage || Math.floor((page / total * 100) || 0);
+        const progressPercent =
+          progress.percentage || Math.floor((page / total) * 100 || 0);
         setReadingProgress(progressPercent);
-        
+
         // Log the calculated progress percentage for debugging
         console.log(`Set reading progress percentage to: ${progressPercent}%`);
       }
     } catch (error) {
-      console.error('Error loading reading progress:', error);
+      console.error("Error loading reading progress:", error);
     }
   };
 
   const saveReadingProgress = async () => {
     if (!bookId || totalPages <= 1) return;
-    
+
     try {
       // Sử dụng hàm mới từ bookService
       await saveBookReadingProgress(bookId, currentPage, totalPages);
     } catch (error) {
-      console.error('Error saving reading progress:', error);
+      console.error("Error saving reading progress:", error);
     }
   };
 
   const updateRecentlyViewed = async () => {
     try {
       console.log(`📚 Thêm sách ID ${bookId} vào danh sách đã xem gần đây`);
-      
+
       // Sử dụng hàm từ bookService
       const response = await addToRecentlyViewedBooks(bookId);
-      
+
       if (response.success) {
         console.log(`📚 Đã cập nhật thành công danh sách sách đã xem`);
       } else {
         console.log(`📚 Lỗi cập nhật sách đã xem: ${response.message}`);
-        
+
         // Xử lý các trường hợp lỗi đặc biệt
-        if (response.error === 'USER_NOT_AUTHENTICATED') {
-          console.log('📚 Lỗi xác thực người dùng, sẽ không lưu lịch sử đọc sách');
+        if (response.error === "USER_NOT_AUTHENTICATED") {
+          console.log(
+            "📚 Lỗi xác thực người dùng, sẽ không lưu lịch sử đọc sách"
+          );
         }
       }
     } catch (error) {
-      console.error('Error updating recently viewed books:', error);
+      console.error("Error updating recently viewed books:", error);
     }
   };
 
@@ -188,31 +228,31 @@ export default function BookViewer() {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log('Starting to load book...');
-      
+
+      console.log("Starting to load book...");
+
       // First, load reading progress
       await loadReadingProgress();
-      
+
       // Get user token for authentication
-      const userToken = await AsyncStorage.getItem('token');
+      const userToken = await AsyncStorage.getItem("token");
       if (!userToken) {
-        throw new Error('Bạn cần đăng nhập để xem sách');
+        throw new Error("Bạn cần đăng nhập để xem sách");
       }
-      
+
       // Set book title if provided
       if (bookTitle) {
         setBookInfo({ name_book: bookTitle });
       }
-      
+
       // Tải thông tin sách nếu chưa có title
       if (!bookTitle) {
         try {
           console.log(`Đang tải thông tin sách...`);
           const response = await fetch(`${API_URL}/books/${bookId}`, {
-            headers: { 'Authorization': `Bearer ${userToken}` }
+            headers: { Authorization: `Bearer ${userToken}` },
           });
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.status && data.data) {
@@ -222,159 +262,193 @@ export default function BookViewer() {
             console.log(`Không thể tải thông tin sách: ${response.status}`);
           }
         } catch (e) {
-          console.error('Lỗi khi tải thông tin sách:', e);
+          console.error("Lỗi khi tải thông tin sách:", e);
         }
       }
-      
+
       // Make sure we log the current page before proceeding
-      console.log(`Reading progress before loading PDF: page ${currentPage}/${totalPages}, progress ${readingProgress}%`);
-      
+      console.log(
+        `Reading progress before loading PDF: page ${currentPage}/${totalPages}, progress ${readingProgress}%`
+      );
+
       // Sử dụng service để lấy URL đúng
       const pdfUrlResult = await getBookPdfViewUrl(bookId);
       if (!pdfUrlResult.success) {
         throw new Error(`Không thể lấy URL của PDF: ${pdfUrlResult.message}`);
       }
-      
+
       const pdfUrl = pdfUrlResult.pdfUrl;
       console.log(`Sử dụng URL PDF: ${pdfUrl}`);
       setPdfViewUrl(pdfUrl);
-      
+
       // Tải PDF về thiết bị trước khi hiển thị
       await downloadAndDisplayPdf(pdfUrl, userToken);
-      
     } catch (err) {
-      console.error('Error loading book:', err);
-      setError(err.message || 'Không thể tải sách');
+      console.error("Error loading book:", err);
+      setError(err.message || "Không thể tải sách");
       setLoading(false);
     }
   };
 
   const downloadAndDisplayPdf = async (pdfUrl, userToken) => {
     try {
-      console.log('Tải sách về bộ nhớ cục bộ...');
-      
+      console.log("Tải sách về bộ nhớ cục bộ...");
+
       // Tạo tên file dựa vào bookId
       const fileName = `book_${bookId}.pdf`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
       setFileUri(fileUri);
-      
+
       // Kiểm tra xem file đã tồn tại chưa
       const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      
+
       if (fileInfo.exists && fileInfo.size > 5000) {
-        console.log('Sử dụng file đã tải từ trước:', fileUri);
+        console.log("Sử dụng file đã tải từ trước:", fileUri);
         createPdfViewerHTML(fileUri);
         setLoading(false);
       } else {
         // Tải file mới
-        console.log('Đang tải PDF mới về:', fileUri);
-        console.log('URL tải PDF:', pdfUrl);
-        
+        console.log("Đang tải PDF mới về:", fileUri);
+        console.log("URL tải PDF:", pdfUrl);
+
         // Trước tiên kiểm tra response bằng fetch
-        console.log('Kiểm tra response từ server...');
+        console.log("Kiểm tra response từ server...");
         const checkResponse = await fetch(pdfUrl, {
-          headers: { 'Authorization': `Bearer ${userToken}` }
+          headers: { Authorization: `Bearer ${userToken}` },
         });
-        
+
         if (!checkResponse.ok) {
-          throw new Error(`Server trả về lỗi: ${checkResponse.status} ${checkResponse.statusText}`);
+          throw new Error(
+            `Server trả về lỗi: ${checkResponse.status} ${checkResponse.statusText}`
+          );
         }
-        
-        const contentType = checkResponse.headers.get('content-type');
-        console.log('Content type:', contentType);
-        
+
+        const contentType = checkResponse.headers.get("content-type");
+        console.log("Content type:", contentType);
+
         // Kiểm tra nếu response là HTML thay vì PDF
-        if (contentType && contentType.includes('text/html')) {
+        if (contentType && contentType.includes("text/html")) {
           const htmlText = await checkResponse.text();
-          console.log('Server trả về HTML thay vì PDF');
-          
-          if (htmlText.includes('login') || htmlText.includes('unauthorized') || 
-              htmlText.includes('đăng nhập') || htmlText.includes('không có quyền')) {
-            throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại');
+          console.log("Server trả về HTML thay vì PDF");
+
+          if (
+            htmlText.includes("login") ||
+            htmlText.includes("unauthorized") ||
+            htmlText.includes("đăng nhập") ||
+            htmlText.includes("không có quyền")
+          ) {
+            throw new Error("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại");
           } else {
-            throw new Error('Server trả về HTML thay vì PDF. Vui lòng liên hệ admin');
+            throw new Error(
+              "Server trả về HTML thay vì PDF. Vui lòng liên hệ admin"
+            );
           }
         }
-        
-        if (!contentType || !contentType.includes('application/pdf')) {
+
+        if (!contentType || !contentType.includes("application/pdf")) {
           throw new Error(`Server không trả về PDF: ${contentType}`);
         }
-        
+
         // Lấy kích thước file từ header nếu có
-        const contentLength = checkResponse.headers.get('content-length');
-        console.log(`Kích thước file theo server: ${contentLength || 'Không xác định'} bytes`);
-        
+        const contentLength = checkResponse.headers.get("content-length");
+        console.log(
+          `Kích thước file theo server: ${
+            contentLength || "Không xác định"
+          } bytes`
+        );
+
         // Sử dụng gạch nối trong tên tham số để tránh lỗi
-        const downloadOptions = { 
-          headers: { 'Authorization': `Bearer ${userToken}` },
-          cache: false
+        const downloadOptions = {
+          headers: { Authorization: `Bearer ${userToken}` },
+          cache: false,
         };
-        
-        console.log('Bắt đầu tải PDF...');
+
+        console.log("Bắt đầu tải PDF...");
         const downloadResumable = FileSystem.createDownloadResumable(
           pdfUrl,
           fileUri,
           downloadOptions,
           (downloadProgress) => {
             if (downloadProgress.totalBytesExpectedToWrite > 0) {
-              const progress = (downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100;
+              const progress =
+                (downloadProgress.totalBytesWritten /
+                  downloadProgress.totalBytesExpectedToWrite) *
+                100;
               console.log(`Tiến độ tải: ${progress.toFixed(2)}%`);
             } else {
               // Nếu không có thông tin kích thước, chỉ hiển thị số byte đã tải
-              console.log(`Đã tải: ${downloadProgress.totalBytesWritten} bytes`);
+              console.log(
+                `Đã tải: ${downloadProgress.totalBytesWritten} bytes`
+              );
             }
           }
         );
-        
+
         const downloadResult = await downloadResumable.downloadAsync();
-        
+
         if (!downloadResult) {
-          throw new Error('Không thể tải file PDF');
+          throw new Error("Không thể tải file PDF");
         }
-        
+
         const downloadedFileInfo = await FileSystem.getInfoAsync(fileUri);
-        console.log(`Đã tải xong PDF, kích thước: ${downloadedFileInfo.size} bytes`);
-        
+        console.log(
+          `Đã tải xong PDF, kích thước: ${downloadedFileInfo.size} bytes`
+        );
+
         if (downloadedFileInfo.size < 1000) {
           // Kiểm tra nội dung file nếu kích thước quá nhỏ
-          const fileContent = await FileSystem.readAsStringAsync(fileUri, { encoding: 'utf8' });
-          console.log('Nội dung file tải về (100 ký tự đầu):', fileContent.substring(0, 100));
-          
-          if (fileContent.includes('<!DOCTYPE html>') || fileContent.includes('<html>')) {
+          const fileContent = await FileSystem.readAsStringAsync(fileUri, {
+            encoding: "utf8",
+          });
+          console.log(
+            "Nội dung file tải về (100 ký tự đầu):",
+            fileContent.substring(0, 100)
+          );
+
+          if (
+            fileContent.includes("<!DOCTYPE html>") ||
+            fileContent.includes("<html>")
+          ) {
             await FileSystem.deleteAsync(fileUri, { idempotent: true });
-            throw new Error('Server trả về HTML thay vì PDF. Vui lòng kiểm tra token hoặc quyền truy cập.');
+            throw new Error(
+              "Server trả về HTML thay vì PDF. Vui lòng kiểm tra token hoặc quyền truy cập."
+            );
           }
-          
-          throw new Error('File PDF tải về quá nhỏ, có thể không phải file PDF hợp lệ');
+
+          throw new Error(
+            "File PDF tải về quá nhỏ, có thể không phải file PDF hợp lệ"
+          );
         }
-        
+
         // Kiểm tra xem file tải về có phải là PDF không bằng cách đọc header
-        const pdfHeader = await FileSystem.readAsStringAsync(fileUri, { 
-          encoding: 'utf8',
+        const pdfHeader = await FileSystem.readAsStringAsync(fileUri, {
+          encoding: "utf8",
           position: 0,
-          length: 8 
+          length: 8,
         });
-        
-        if (!pdfHeader.startsWith('%PDF-')) {
-          console.log('Header file không phải PDF:', pdfHeader);
+
+        if (!pdfHeader.startsWith("%PDF-")) {
+          console.log("Header file không phải PDF:", pdfHeader);
           await FileSystem.deleteAsync(fileUri, { idempotent: true });
-          throw new Error('File tải về không phải là PDF hợp lệ');
+          throw new Error("File tải về không phải là PDF hợp lệ");
         }
-        
+
         createPdfViewerHTML(fileUri);
         setLoading(false);
       }
     } catch (error) {
-      console.error('Lỗi khi tải PDF:', error);
+      console.error("Lỗi khi tải PDF:", error);
       setError(`Không thể tải sách: ${error.message}`);
       setLoading(false);
     }
   };
 
   const createPdfViewerHTML = (filePath) => {
-    console.log('Tạo PDF viewer với file local:', filePath);
-    console.log(`Current reading state: page ${currentPage}/${totalPages}, progress: ${readingProgress}%`);
-    
+    console.log("Tạo PDF viewer với file local:", filePath);
+    console.log(
+      `Current reading state: page ${currentPage}/${totalPages}, progress: ${readingProgress}%`
+    );
+
     // Create HTML with PDF.js viewer that loads the local file
     const html = `
       <!DOCTYPE html>
@@ -426,7 +500,7 @@ export default function BookViewer() {
               right: 0;
               bottom: 0;
               overflow: auto;
-              padding-top: ${Platform.OS === 'android' ? 56 : 60}px;
+              padding-top: ${Platform.OS === "android" ? 56 : 60}px;
               box-sizing: border-box;
               -webkit-overflow-scrolling: touch;
             }
@@ -569,7 +643,7 @@ export default function BookViewer() {
             
             // Calculate screen size
             const screenWidth = ${screenWidth};
-            const isAndroid = ${Platform.OS === 'android' ? 'true' : 'false'};
+            const isAndroid = ${Platform.OS === "android" ? "true" : "false"};
            
             // Variables for touch handling
             let touchStartX = 0;
@@ -862,48 +936,48 @@ export default function BookViewer() {
         </body>
       </html>
     `;
-    
+
     setHtmlContent(html);
   };
 
   const handleWebViewMessage = (event) => {
     const message = event.nativeEvent.data;
-    
+
     // Handle debug messages
-    if (message.startsWith('DEBUG:')) {
-      console.log('WebView Debug:', message.substring(6));
+    if (message.startsWith("DEBUG:")) {
+      console.log("WebView Debug:", message.substring(6));
       return;
     }
-    
-    if (message === 'TOGGLE_MENU') {
+
+    if (message === "TOGGLE_MENU") {
       toggleBottomMenu();
     }
-    
-    if (message.includes('PDF_LOAD_ERROR') || message.includes('PDF_ERROR')) {
+
+    if (message.includes("PDF_LOAD_ERROR") || message.includes("PDF_ERROR")) {
       console.warn(`Book loading error: ${message}`);
-      setError('Không thể tải sách. ' + message);
+      setError("Không thể tải sách. " + message);
     }
-    
-    if (message === 'PDF_LOADED') {
-      console.log('Book fully loaded');
+
+    if (message === "PDF_LOADED") {
+      console.log("Book fully loaded");
       pdfLoadedRef.current = true;
-      
+
       // Tạo chapters tự động nếu chưa tạo và nếu đã biết tổng số trang
       if (!loadedChapters.current && totalPages > 0) {
-        console.log('Creating chapters after PDF loaded');
+        console.log("Creating chapters after PDF loaded");
         extractChapters();
       }
     }
-    
+
     // Handle request for PDF data
-    if (message === 'REQUEST_PDF_DATA' && fileUri) {
+    if (message === "REQUEST_PDF_DATA" && fileUri) {
       (async () => {
         try {
-          console.log('WebView requested PDF data, loading from:', fileUri);
+          console.log("WebView requested PDF data, loading from:", fileUri);
           const base64Data = await FileSystem.readAsStringAsync(fileUri, {
             encoding: FileSystem.EncodingType.Base64,
           });
-          
+
           // Inject our saved page number before handling the PDF data
           if (webViewRef.current) {
             console.log(`Ensuring initial page is set to: ${currentPage}`);
@@ -914,52 +988,52 @@ export default function BookViewer() {
             `);
           }
         } catch (error) {
-          console.error('Error reading PDF file for WebView:', error);
+          console.error("Error reading PDF file for WebView:", error);
           setError(`Lỗi khi đọc file PDF: ${error.message}`);
         }
       })();
     }
-    
+
     // Handle page change messages
-    if (message.startsWith('PAGE_CHANGE:')) {
-      const parts = message.split(':');
+    if (message.startsWith("PAGE_CHANGE:")) {
+      const parts = message.split(":");
       if (parts.length === 3) {
         const page = parseInt(parts[1], 10);
         const total = parseInt(parts[2], 10);
-        
+
         if (!isNaN(page) && page > 0 && !isNaN(total) && total > 0) {
           console.log(`Received page change: ${page}/${total}`);
-          
+
           let shouldUpdate = false;
-          
+
           if (page !== currentPage) {
             shouldUpdate = true;
             setCurrentPage(page);
           }
-          
+
           if (total !== totalPages && total > 0) {
             shouldUpdate = true;
             setTotalPages(total);
           }
-          
+
           if (shouldUpdate) {
-            console.log('Saving reading progress after page change');
+            console.log("Saving reading progress after page change");
             setTimeout(() => saveReadingProgress(), 100);
           }
         }
       }
     }
-    
+
     // Handle total pages message
-    if (message.startsWith('TOTAL_PAGES:')) {
-      const total = parseInt(message.split(':')[1], 10);
+    if (message.startsWith("TOTAL_PAGES:")) {
+      const total = parseInt(message.split(":")[1], 10);
       if (!isNaN(total) && total > 0) {
         console.log(`Setting total pages to ${total}`);
         setTotalPages(total);
-        
+
         // Tạo chapters khi biết số trang
         if (!loadedChapters.current) {
-          console.log('Creating chapters after receiving total pages');
+          console.log("Creating chapters after receiving total pages");
           setTimeout(() => extractChapters(), 300);
         }
       }
@@ -968,13 +1042,13 @@ export default function BookViewer() {
 
   // Function to toggle bottom menu
   const toggleBottomMenu = () => {
-    setBottomMenuVisible(prev => !prev);
-    setControlsVisible(prev => !prev);
+    setBottomMenuVisible((prev) => !prev);
+    setControlsVisible((prev) => !prev);
   };
 
   const goToNextPage = () => {
     if (currentPage < totalPages) {
-      setCurrentPage(prevPage => prevPage + 1);
+      setCurrentPage((prevPage) => prevPage + 1);
       if (webViewRef.current) {
         webViewRef.current.injectJavaScript(`
           queueRenderPage(${currentPage + 1});
@@ -986,7 +1060,7 @@ export default function BookViewer() {
 
   const goToPrevPage = () => {
     if (currentPage > 1) {
-      setCurrentPage(prevPage => prevPage - 1);
+      setCurrentPage((prevPage) => prevPage - 1);
       if (webViewRef.current) {
         webViewRef.current.injectJavaScript(`
           queueRenderPage(${currentPage - 1});
@@ -999,9 +1073,11 @@ export default function BookViewer() {
   // For debugging
   const showDebugInfo = () => {
     Alert.alert(
-      'Thông tin sách',
-      `Book ID: ${bookId}\nTrang: ${currentPage}/${totalPages}\nTiến độ: ${readingProgress}%\nPDF URL: ${pdfViewUrl || directPdfUrl || 'Không có'}\nFile URI: ${fileUri || 'Không có'}`,
-      [{ text: 'OK' }]
+      "Thông tin sách",
+      `Book ID: ${bookId}\nTrang: ${currentPage}/${totalPages}\nTiến độ: ${readingProgress}%\nPDF URL: ${
+        pdfViewUrl || directPdfUrl || "Không có"
+      }\nFile URI: ${fileUri || "Không có"}`,
+      [{ text: "OK" }]
     );
   };
 
@@ -1009,24 +1085,29 @@ export default function BookViewer() {
     <View style={styles.container}>
       {/* Add Stack navigator with headerShown false */}
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       {/* Header */}
-      <View style={[
-        styles.header,
-        controlsVisible ? null : styles.headerHidden
-      ]}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      <View
+        style={[styles.header, controlsVisible ? null : styles.headerHidden]}
+      >
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {bookInfo?.name_book || bookTitle || 'Đang đọc'}
+          {bookInfo?.name_book || bookTitle || "Đang đọc"}
         </Text>
-        
+
         <TouchableOpacity style={styles.debugButton} onPress={showDebugInfo}>
           <Icon name="info" size={20} color="#fff" />
         </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.menuButton} onPress={() => setShowMenu(true)}>
+
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={() => setShowMenu(true)}
+        >
           <Icon name="menu" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
@@ -1040,10 +1121,7 @@ export default function BookViewer() {
         <View style={styles.errorContainer}>
           <Icon name="error-outline" size={64} color="#ff0000" />
           <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={loadBook}
-          >
+          <TouchableOpacity style={styles.retryButton} onPress={loadBook}>
             <Text style={styles.retryButtonText}>Thử lại</Text>
           </TouchableOpacity>
         </View>
@@ -1053,7 +1131,7 @@ export default function BookViewer() {
             ref={webViewRef}
             source={{ html: htmlContent }}
             style={styles.webView}
-            originWhitelist={['*']}
+            originWhitelist={["*"]}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             allowFileAccess={true}
@@ -1064,44 +1142,58 @@ export default function BookViewer() {
             onMessage={handleWebViewMessage}
             onError={(syntheticEvent) => {
               const { nativeEvent } = syntheticEvent;
-              console.error('WebView error:', nativeEvent);
-              setError(`Lỗi WebView: ${nativeEvent.description || 'Lỗi không xác định'}`);
+              console.error("WebView error:", nativeEvent);
+              setError(
+                `Lỗi WebView: ${
+                  nativeEvent.description || "Lỗi không xác định"
+                }`
+              );
             }}
-            scalesPageToFit={Platform.OS === 'android'}
+            scalesPageToFit={Platform.OS === "android"}
           />
-          
+
           {/* Bottom menu */}
-          <View style={[
-            styles.bottomMenu,
-            bottomMenuVisible ? null : styles.bottomMenuHidden
-          ]}>
+          <View
+            style={[
+              styles.bottomMenu,
+              bottomMenuVisible ? null : styles.bottomMenuHidden,
+            ]}
+          >
             <View style={styles.pageNavigationContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.navButton}
                 onPress={goToPrevPage}
                 disabled={currentPage <= 1}
               >
-                <Icon name="navigate-before" size={28} color={currentPage <= 1 ? "#ccc" : "#3b82f6"} />
+                <Icon
+                  name="navigate-before"
+                  size={28}
+                  color={currentPage <= 1 ? "#ccc" : "#3b82f6"}
+                />
               </TouchableOpacity>
-              
+
               <View style={styles.pageInfo}>
                 <Text style={styles.pageText}>
                   {currentPage} / {totalPages}
                 </Text>
               </View>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.navButton}
                 onPress={goToNextPage}
                 disabled={currentPage >= totalPages}
               >
-                <Icon name="navigate-next" size={28} color={currentPage >= totalPages ? "#ccc" : "#3b82f6"} />
+                <Icon
+                  name="navigate-next"
+                  size={28}
+                  color={currentPage >= totalPages ? "#ccc" : "#3b82f6"}
+                />
               </TouchableOpacity>
             </View>
           </View>
         </View>
       )}
-      
+
       {/* Menu Modal giống PdfViewer */}
       {showMenu && (
         <View style={styles.menuModal}>
@@ -1112,7 +1204,7 @@ export default function BookViewer() {
                 <Icon name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
-            
+
             {/* Always show pages view */}
             <ScrollView style={styles.pagesScrollView}>
               <View style={styles.pagesGrid}>
@@ -1125,12 +1217,12 @@ export default function BookViewer() {
                       {Array.from(
                         { length: Math.min(30, totalPages - i * 30) },
                         (_, j) => i * 30 + j + 1
-                      ).map(page => (
+                      ).map((page) => (
                         <TouchableOpacity
                           key={page}
                           style={[
                             styles.pageButton,
-                            currentPage === page && styles.currentPageButton
+                            currentPage === page && styles.currentPageButton,
                           ]}
                           onPress={() => {
                             setCurrentPage(page);
@@ -1141,10 +1233,11 @@ export default function BookViewer() {
                             `);
                           }}
                         >
-                          <Text 
+                          <Text
                             style={[
                               styles.pageButtonText,
-                              currentPage === page && styles.currentPageButtonText
+                              currentPage === page &&
+                                styles.currentPageButtonText,
                             ]}
                           >
                             {page}
@@ -1166,22 +1259,22 @@ export default function BookViewer() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#3b82f6',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#3b82f6",
     paddingHorizontal: 16,
     paddingVertical: 8,
-    paddingTop: Platform.OS === 'ios' ? 40 : 8,
-    position: 'absolute',
+    paddingTop: Platform.OS === "ios" ? 40 : 8,
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     zIndex: 10,
     elevation: 3,
-    height: Platform.OS === 'ios' ? 88 : 56,
+    height: Platform.OS === "ios" ? 88 : 56,
   },
   headerHidden: {
     transform: [{ translateY: -100 }],
@@ -1191,9 +1284,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   debugButton: {
     padding: 8,
@@ -1203,61 +1296,61 @@ const styles = StyleSheet.create({
   },
   webViewContainer: {
     flex: 1,
-    position: 'relative',
-    backgroundColor: '#f0f0f0',
-    marginTop: Platform.OS === 'ios' ? 88 : 56,
+    position: "relative",
+    backgroundColor: "#f0f0f0",
+    marginTop: Platform.OS === "ios" ? 88 : 56,
     marginBottom: 0,
   },
   webView: {
     flex: 1,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: "#f0f0f0",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 16,
-    color: '#6b7280',
+    color: "#6b7280",
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   errorContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 16,
   },
   errorText: {
     marginTop: 16,
-    color: '#ef4444',
+    color: "#ef4444",
     fontSize: 18,
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 24,
   },
   retryButton: {
     marginTop: 12,
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     minWidth: 200,
-    alignItems: 'center',
+    alignItems: "center",
   },
   retryButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
   },
   bottomMenu: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    position: 'absolute',
+    borderTopColor: "#e5e7eb",
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
@@ -1269,57 +1362,57 @@ const styles = StyleSheet.create({
   },
   pageNavigationContainer: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   navButton: {
     padding: 8,
     borderRadius: 30,
-    backgroundColor: 'rgba(235, 235, 235, 0.5)',
+    backgroundColor: "rgba(235, 235, 235, 0.5)",
   },
   pageInfo: {
     marginHorizontal: 15,
-    alignItems: 'center',
+    alignItems: "center",
     minWidth: 80,
   },
   pageText: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
+    fontWeight: "500",
+    color: "#333",
   },
-  
+
   // Menu Modal styles
   menuModal: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     zIndex: 1000,
   },
   menuContent: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 88 : 56,
+    position: "absolute",
+    top: Platform.OS === "ios" ? 88 : 56,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 16,
   },
   menuHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   menuTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
   },
   pagesScrollView: {
     flex: 1,
@@ -1332,33 +1425,33 @@ const styles = StyleSheet.create({
   },
   pageSectionTitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: "#6b7280",
     marginBottom: 8,
     paddingHorizontal: 4,
   },
   pageButtonsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     marginHorizontal: -4,
   },
   pageButton: {
-    width: '16.666%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "16.666%",
+    justifyContent: "center",
+    alignItems: "center",
     padding: 6,
     margin: 4,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: "#f3f4f6",
     borderRadius: 6,
   },
   currentPageButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
   },
   pageButtonText: {
     fontSize: 14,
-    color: '#374151',
+    color: "#374151",
   },
   currentPageButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
   },
-}); 
+});

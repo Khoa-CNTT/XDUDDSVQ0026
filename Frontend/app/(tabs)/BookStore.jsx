@@ -511,9 +511,6 @@ export default function BookStore() {
           <Text className="text-2xl font-bold text-gray-800">Thư viện sách</Text>
           <Text className="text-sm text-gray-500 mt-1">Khám phá hàng nghìn cuốn sách hay</Text>
         </View>
-        <TouchableOpacity className="w-10 h-10 bg-gray-100 rounded-full justify-center items-center">
-          <Ionicons name="search-outline" size={24} color="#333" />
-        </TouchableOpacity>
       </View>
       
       {/* Main Content */}

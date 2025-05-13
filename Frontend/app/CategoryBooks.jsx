@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,10 +9,10 @@ import {
   StatusBar,
   RefreshControl,
   TextInput,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { API_URL } from './config';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter, Stack } from "expo-router";
+import { API_URL } from "./config";
 import RenderBookItem from "./components/BookStore/RenderBookItem";
 
 export default function CategoryBooks() {
@@ -20,7 +20,7 @@ export default function CategoryBooks() {
   const router = useRouter();
   const [books, setBooks] = useState([]);
   const [filteredBooks, setFilteredBooks] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -31,15 +31,15 @@ export default function CategoryBooks() {
       setIsLoading(true);
       const response = await fetch(`${API_URL}/books/category/${categoryId}`);
       const data = await response.json();
-      
+
       if (data.status && data.data) {
-        const processedBooks = data.data.map(book => ({
+        const processedBooks = data.data.map((book) => ({
           id: book.book_id,
           title: book.name_book,
-          author: book.author ? book.author.name_author : 'Không rõ tác giả',
+          author: book.author ? book.author.name_author : "Không rõ tác giả",
           image: book.image,
           file_path: book.file_path,
-          price: book.is_free ? 'Miễn phí' : `${book.price}₫`,
+          price: book.is_free ? "Miễn phí" : `${book.price}₫`,
           rating: Math.floor(Math.random() * 5) + 1,
           category_id: book.category_id,
           description: book.description || "Mô tả sách sẽ hiển thị ở đây",
@@ -47,11 +47,11 @@ export default function CategoryBooks() {
         setBooks(processedBooks);
         setFilteredBooks(processedBooks);
       } else {
-        throw new Error('Không thể tải dữ liệu sách');
+        throw new Error("Không thể tải dữ liệu sách");
       }
     } catch (error) {
-      console.error('Error fetching books by category:', error);
-      setError('Không thể tải dữ liệu, vui lòng thử lại sau');
+      console.error("Error fetching books by category:", error);
+      setError("Không thể tải dữ liệu, vui lòng thử lại sau");
     } finally {
       setIsLoading(false);
     }
@@ -60,31 +60,32 @@ export default function CategoryBooks() {
   // Handle search
   const handleSearch = (text) => {
     setSearchQuery(text);
-    
-    if (text.trim() === '') {
+
+    if (text.trim() === "") {
       setFilteredBooks(books);
       return;
     }
-    
+
     const query = text.toLowerCase().trim();
-    const results = books.filter(book => 
-      book.title.toLowerCase().includes(query) || 
-      book.author.toLowerCase().includes(query)
+    const results = books.filter(
+      (book) =>
+        book.title.toLowerCase().includes(query) ||
+        book.author.toLowerCase().includes(query)
     );
-    
+
     setFilteredBooks(results);
   };
 
   // Clear search
   const clearSearch = () => {
-    setSearchQuery('');
+    setSearchQuery("");
     setFilteredBooks(books);
   };
 
   // Handle refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    setSearchQuery('');
+    setSearchQuery("");
     await fetchBooks();
     setIsRefreshing(false);
   };
@@ -94,12 +95,12 @@ export default function CategoryBooks() {
     if (book.file_path) {
       // Navigate to PDF viewer
       router.push({
-        pathname: '/PdfViewer',
-        params: { 
-          pdfPath: book.file_path, 
+        pathname: "/PdfViewer",
+        params: {
+          pdfPath: book.file_path,
           pdfTitle: book.title || book.name_book,
-          pdfId: book.id || book.book_id
-        }
+          pdfId: book.id || book.book_id,
+        },
       });
     } else {
       // Navigate to book details
@@ -118,7 +119,9 @@ export default function CategoryBooks() {
       <SafeAreaView className="flex-1 justify-center items-center bg-white">
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <ActivityIndicator size="large" color="#ff5a5f" />
-        <Text className="mt-4 text-base text-gray-500">Đang tải danh sách sách...</Text>
+        <Text className="mt-4 text-base text-gray-500">
+          Đang tải danh sách sách...
+        </Text>
       </SafeAreaView>
     );
   }
@@ -129,8 +132,10 @@ export default function CategoryBooks() {
       <SafeAreaView className="flex-1 justify-center items-center bg-white p-5">
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <Ionicons name="alert-circle-outline" size={64} color="#ff5a5f" />
-        <Text className="mt-4 text-base text-gray-500 text-center">{error}</Text>
-        <TouchableOpacity 
+        <Text className="mt-4 text-base text-gray-500 text-center">
+          {error}
+        </Text>
+        <TouchableOpacity
           className="mt-6 px-6 py-3 bg-[#ff5a5f] rounded-lg"
           onPress={fetchBooks}
         >
@@ -142,15 +147,15 @@ export default function CategoryBooks() {
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <Stack.Screen 
+      <Stack.Screen
         options={{
-          title: categoryName || 'Danh mục sách',
+          title: categoryName || "Danh mục sách",
           headerBackTitleVisible: false,
         }}
       />
 
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      
+
       {/* Main Content */}
       <View className="flex-1 px-4 pb-4">
         {/* Search Bar */}
@@ -171,7 +176,7 @@ export default function CategoryBooks() {
             ) : null}
           </View>
         </View>
-        
+
         {/* Header info */}
         <View className="py-2">
           {searchQuery ? (
@@ -184,25 +189,27 @@ export default function CategoryBooks() {
             </Text>
           )}
         </View>
-        
+
         {/* Book grid */}
         {filteredBooks.length > 0 ? (
           <FlatList
             data={filteredBooks}
             numColumns={2}
-            renderItem={({ item }) => <RenderBookItem item={item} onPress={handleBookPress} />}
+            renderItem={({ item }) => (
+              <RenderBookItem item={item} onPress={handleBookPress} />
+            )}
             keyExtractor={(item) => item.id.toString()}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 120 }}
-            columnWrapperStyle={{ 
-              justifyContent: 'space-between',
+            columnWrapperStyle={{
+              justifyContent: "space-between",
               marginBottom: 12,
             }}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
-                colors={['#ff5a5f']}
+                colors={["#ff5a5f"]}
               />
             }
           />
@@ -210,11 +217,13 @@ export default function CategoryBooks() {
           <View className="flex-1 justify-center items-center">
             <Ionicons name="book-outline" size={64} color="#ddd" />
             <Text className="mt-4 text-gray-400 text-center">
-              {searchQuery ? 'Không tìm thấy sách phù hợp' : 'Không có sách nào trong danh mục này'}
+              {searchQuery
+                ? "Không tìm thấy sách phù hợp"
+                : "Không có sách nào trong danh mục này"}
             </Text>
           </View>
         )}
       </View>
     </SafeAreaView>
   );
-} 
+}
