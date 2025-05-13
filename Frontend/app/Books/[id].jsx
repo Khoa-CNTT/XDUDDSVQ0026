@@ -307,8 +307,9 @@ export default function BookDetailScreen() {
     <SafeAreaView className="flex-1 bg-white" >
       <Stack.Screen
         options={{
-          title: 'Chi tiết sách',
+          headerTitle: 'Chi tiết sách',
           headerBackTitle: 'Quay lại',
+          headerShown: true,
         }}
       />
      

@@ -107,6 +107,13 @@ export default function AppLayout() {
             animation: 'slide_from_right'
         }}
        />
+       <Stack.Screen name="Books/[id]"
+        options={{
+            headerTransparent: false,
+            headerTitle: 'Chi tiết sách',
+            headerShown: true,
+        }}
+       />
        <Stack.Screen name="Categories"
         options={{
             headerTransparent: false,
