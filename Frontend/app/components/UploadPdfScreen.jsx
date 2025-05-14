@@ -160,9 +160,13 @@ export default function UploadPdfScreen() {
 
   const pickPDF = async () => {
     try {
-      // Sử dụng expo-document-picker thay vì react-native-document-picker
+      // Sử dụng expo-document-picker với nhiều loại MIME
       const result = await DocumentPicker.getDocumentAsync({
-        type: "application/pdf",
+        type: [
+          "application/pdf",
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "application/msword"
+        ],
         copyToCacheDirectory: true,
       });
 
@@ -186,107 +190,107 @@ export default function UploadPdfScreen() {
         return;
       }
 
+      // Xác định loại file dựa trên tên file và mimeType
+      const fileName = selectedFile.name || '';
+      const mimeType = selectedFile.mimeType || '';
+      const isDocx = fileName.toLowerCase().endsWith('.docx') || 
+                  fileName.toLowerCase().endsWith('.doc') ||
+                  mimeType.includes('openxmlformats') ||
+                  mimeType.includes('msword');
+
       setPdfFile({
-        name: selectedFile.name || `file_${new Date().getTime()}.pdf`,
+        name: selectedFile.name || `file_${new Date().getTime()}.${isDocx ? 'docx' : 'pdf'}`,
         size: selectedFile.size || 0,
         uri: selectedFile.uri,
-        type: "application/pdf",
+        type: isDocx ? 
+              (fileName.toLowerCase().endsWith('.doc') ? "application/msword" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document") :
+              "application/pdf",
+        isDocx: isDocx // Flag để theo dõi nếu đây là file DOCX
       });
     } catch (err) {
       console.error("Lỗi khi chọn file:", err);
-      Alert.alert("Lỗi", "Không thể chọn file PDF. Vui lòng thử lại.");
+      Alert.alert("Lỗi", "Không thể chọn file. Vui lòng thử lại.");
     }
   };
 
   const uploadPDF = async () => {
     if (!pdfFile) {
-      Alert.alert("Lỗi", "Vui lòng chọn file PDF");
+      Alert.alert("Lỗi", "Vui lòng chọn file PDF hoặc DOCX");
       return;
     }
 
     setLoading(true);
 
     try {
-      // Lấy token từ AsyncStorage
-      let token = await AsyncStorage.getItem("token");
-      console.log("Using token for upload:", token);
+      const token = await AsyncStorage.getItem("token");
 
-      // Nếu không có token, tạo token mới thay vì báo lỗi
       if (!token) {
-        console.log("Không tìm thấy token, tạo token mới");
-        token = "fake_token_" + Date.now();
-        await AsyncStorage.setItem("token", token);
-        console.log("Đã tạo token mới:", token);
+        throw new Error("Unauthorized. Please login.");
       }
 
-      // Tạo FormData để gửi file
+      // Tạo FormData
       const formData = new FormData();
-
-      // Make sure all values are strings and not null
-      const fileName = pdfFile.name ? String(pdfFile.name) : "file.pdf";
-      const fileType = "application/pdf";
-      const fileUri = String(pdfFile.uri); // Ensure URI is a string
-
-      // Create the file object with guaranteed non-null values
-      const fileObject = {
-        uri: fileUri,
-        name: fileName,
-        type: fileType,
-      };
-
-      console.log("File object for upload:", JSON.stringify(fileObject));
-
-      // Safely append to FormData
-      formData.append("file", fileObject);
-      formData.append("title", fileName);
+      formData.append("file", {
+        uri: pdfFile.uri,
+        name: pdfFile.name,
+        type: pdfFile.type,
+      });
+      formData.append("title", pdfFile.name.split('.')[0] || "Tài liệu mới");
       formData.append("description", "Uploaded from mobile app");
-
-      console.log("Uploading PDF to:", `${API_URL}/pdfs`);
-
-      // Gọi API thực tế thay vì giả lập
-      try {
-        const response = await fetch(`${API_URL}/pdfs`, {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-          body: formData,
-        });
-
-        const responseText = await response.text();
-        console.log("Upload response:", responseText);
-
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch (parseError) {
-          console.error("JSON parse error:", parseError);
-          throw new Error("Server response invalid: " + responseText);
-        }
-
-        if (!data.success) {
-          throw new Error(data.message || "Upload failed");
-        }
-
-        console.log("Upload successful:", data);
-
-        // Trả về thành công
-        Alert.alert("Thành công", "Đã tải lên PDF thành công", [
-          {
-            text: "OK",
-            onPress: () => {
-              fetchPDFs(); // Refresh danh sách PDF sau khi tải lên
-              setPdfFile(null); // Reset state
-              router.push("/(tabs)/Library");
-            },
-          },
-        ]);
-      } catch (apiError) {
-        console.error("API error:", apiError);
-        throw new Error("API call failed: " + apiError.message);
+      
+      // Thêm field mới để báo cho server biết đây là file DOCX cần chuyển đổi
+      if (pdfFile.isDocx) {
+        formData.append("convert_from", "docx");
       }
+
+      let endpoint = `${API_URL}/pdfs`;
+
+      // Nếu là file DOCX, sử dụng endpoint mới
+      if (pdfFile.isDocx) {
+        endpoint = `${API_URL}/docx/upload`;
+      }
+
+      console.log("Uploading file to:", endpoint);
+
+      // Gọi API
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+        body: formData,
+      });
+
+      const responseText = await response.text();
+      console.log("Upload response:", responseText);
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError);
+        throw new Error("Server response invalid: " + responseText);
+      }
+
+      if (!data.success) {
+        throw new Error(data.message || "Upload failed");
+      }
+
+      console.log("Upload successful:", data);
+
+      // Trả về thành công
+      Alert.alert("Thành công", `Đã tải lên ${pdfFile.isDocx ? 'tài liệu DOCX' : 'PDF'} thành công`, [
+        {
+          text: "OK",
+          onPress: () => {
+            fetchPDFs(); // Refresh danh sách PDF sau khi tải lên
+            setPdfFile(null); // Reset state
+            router.push("/(tabs)/Library");
+          },
+        },
+      ]);
     } catch (error) {
       console.error("Lỗi khi tải lên file:", error);
       Alert.alert("Lỗi", `Không thể tải lên file: ${error.message}`);
@@ -335,16 +339,21 @@ export default function UploadPdfScreen() {
             style={{ marginRight: 10 }}
           />
           <Text className="text-base text-gray-700">
-            Chọn file PDF từ thiết bị
+            Chọn file PDF hoặc DOCX từ thiết bị
           </Text>
         </TouchableOpacity>
 
         {pdfFile && (
           <View className="bg-gray-50 p-4 rounded-lg mb-5 border border-gray-100">
             <Text className="text-base font-bold mb-2">{pdfFile.name}</Text>
-            <Text className="text-sm text-gray-500">
+            <Text className="text-sm text-gray-500 mb-2">
               {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
             </Text>
+            {pdfFile.isDocx && (
+              <Text className="text-xs text-blue-500 italic">
+                File DOCX sẽ được chuyển đổi thành PDF ở server
+              </Text>
+            )}
             {pdfFile.uri && (
               <Text
                 className="text-xs text-gray-400 mt-2"
