@@ -41,7 +41,6 @@ export default function PdfViewer() {
   const [savedProgressPercentage, setSavedProgressPercentage] = useState(null); // Store the saved progress percentage
   const [controlsVisible, setControlsVisible] = useState(true); // Track if controls are visible
   const [bottomMenuVisible, setBottomMenuVisible] = useState(true); // Track if bottom menu is visible
-  const [isHighlighterActive, setIsHighlighterActive] = useState(false); // Track if highlighter is active
   const [showMenu, setShowMenu] = useState(false);
   const [chapters, setChapters] = useState([]);
   const [activeTab, setActiveTab] = useState("chapters");
@@ -542,18 +541,12 @@ export default function PdfViewer() {
   const createPdfJsHTML = (path) => {
     console.log("Using PDF.js viewer for:", path);
 
-    // Always use the embedded PDF.js approach instead of the remote viewer URL
-    // This approach works reliably on all devices
+    // Create HTML with PDF.js viewer that loads the local file
     const html = `
       <!DOCTYPE html>
       <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=${
-            1 / pixelRatio
-          }, maximum-scale=5.0, user-scalable=yes">
-          <!-- Preload PDF.js resources to improve loading time -->
-          <link rel="preload" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js" as="script">
-          <link rel="preload" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.worker.min.js" as="script">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
           <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.4.120/build/pdf.min.js"></script>
           <style>
             body, html {
@@ -593,29 +586,23 @@ export default function PdfViewer() {
               100% { transform: rotate(360deg); }
             }
             #pdf-container {
-              will-change: transform;
-              width: 100%;
-              height: 100%;
-              overflow: auto;
               position: absolute;
               top: 0;
               left: 0;
               right: 0;
               bottom: 0;
-              -webkit-overflow-scrolling: touch;
-              padding-top: ${
-                Platform.OS === "android" ? 56 : 60
-              }px; /* Adjusted for Android */
+              overflow: auto;
+              padding-top: ${Platform.OS === "android" ? 56 : 60}px;
               box-sizing: border-box;
+              -webkit-overflow-scrolling: touch;
             }
             .page-canvas {
               display: block;
               border: none;
               background: white;
-              will-change: transform;
               width: 100% !important;
               height: auto !important;
-              margin: 0 !important;
+              margin: 0 auto !important;
               box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             }
             #page-info {
@@ -650,7 +637,6 @@ export default function PdfViewer() {
               width: ${readingProgress}%;
               transition: width 0.3s ease;
             }
-            /* Add loading text */
             #loading p {
               margin-top: 15px;
               color: #333;
@@ -664,45 +650,42 @@ export default function PdfViewer() {
               color: #3b82f6;
               font-weight: bold;
             }
-            /* Highlighter styles */
-            .highlighter-enabled {
-              cursor: crosshair;
-            }
-            .highlight-layer {
-              position: absolute;
-              pointer-events: none;
-              z-index: 2;
-            }
-            .highlight {
-              position: absolute;
-              background-color: rgba(255, 255, 0, 0.3);
-              border-radius: 2px;
-              pointer-events: none;
-            }
-            /* Zoom indicator */
-            #zoom-indicator {
+            #debug {
               position: fixed;
-              bottom: 50px;
-              right: 20px;
-              background-color: rgba(0,0,0,0.5);
-              color: white;
-              padding: 4px 8px;
-              border-radius: 12px;
+              bottom: 40px;
+              left: 10px;
+              color: red;
+              background: white;
+              padding: 5px;
+              border-radius: 5px;
               font-size: 12px;
-              z-index: 100;
-              opacity: 0;
-              transition: opacity 0.3s;
+              max-width: 80%;
+              z-index: 1000;
+              opacity: 0.8;
             }
-            #zoom-indicator.visible {
-              opacity: 0.7;
+            #error-container {
+              display: none;
+              position: absolute;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+              background-color: rgba(255, 0, 0, 0.1);
+              padding: 20px;
+              border-radius: 10px;
+              text-align: center;
+              z-index: 1001;
+            }
+            #error-container h3 {
+              color: #d32f2f;
+              margin-bottom: 10px;
             }
           </style>
         </head>
         <body>
           <div id="loading">
             <div class="spinner"></div>
-            <p>Loading PDF...</p>
-            <div class="loading-progress" id="loading-progress">Preparing document...</div>
+            <p>Đang tải tài liệu...</p>
+            <div class="loading-progress" id="loading-progress">Đang chuẩn bị tài liệu...</div>
           </div>
          
           <div id="progress-bar-container">
@@ -711,9 +694,14 @@ export default function PdfViewer() {
          
           <div id="pdf-container"></div>
          
-          <div id="page-info" class="fade">Page ${currentPage} of 1</div>
+          <div id="page-info" class="fade">Trang ${currentPage} / ${totalPages}</div>
           
-          <div id="zoom-indicator">Zoom: 100%</div>
+          <div id="debug"></div>
+          
+          <div id="error-container">
+            <h3>Lỗi khi tải PDF</h3>
+            <p id="error-message"></p>
+          </div>
          
           <script>
             // Configure PDF.js worker
@@ -722,29 +710,32 @@ export default function PdfViewer() {
             // Variables for PDF rendering
             let pdfDoc = null;
             let currentPage = ${currentPage};
-            let scale = 2.0; // Increased scale for better visibility
+            let scale = 1.5;
             let pageRendering = false;
             let pageNumPending = null;
+            let totalPagesCount = ${totalPages};
+            let currentProgressPercentage = ${readingProgress};
             const container = document.getElementById('pdf-container');
             const loading = document.getElementById('loading');
             const loadingProgress = document.getElementById('loading-progress');
             const pageInfo = document.getElementById('page-info');
             const progressBar = document.getElementById('progress-bar');
-            const zoomIndicator = document.getElementById('zoom-indicator');
+            const debug = document.getElementById('debug');
+            const errorContainer = document.getElementById('error-container');
+            const errorMessage = document.getElementById('error-message');
             
-            // Detect Android for platform specific adjustments
-            const isAndroid = ${Platform.OS === "android" ? "true" : "false"};
-           
-            // Calculate initial scale to fit width of phone screen with pixel ratio
+            // Function to log debug messages
+            function logDebug(message) {
+              console.log(message);
+              if (debug) {
+                debug.textContent += message + '\\n';
+              }
+              window.ReactNativeWebView.postMessage('DEBUG:' + message);
+            }
+            
+            // Calculate screen size
             const screenWidth = ${screenWidth};
-            const screenHeight = ${screenHeight};
-            const pixelRatio = ${pixelRatio};
-            
-            // Adjust scale to make PDF fit full width with better defaults for Android
-            const initialScale = isAndroid 
-              ? Math.max(1.5, (screenWidth / 600)) 
-              : Math.max(1.5, (screenWidth / 612));
-            scale = initialScale;
+            const isAndroid = ${Platform.OS === "android" ? "true" : "false"};
            
             // Variables for touch handling
             let touchStartX = 0;
@@ -754,20 +745,9 @@ export default function PdfViewer() {
             let lastTap = 0;
             let tappedTwice = false;
             
-            // Flag to track if we're zoomed in (to disable page swiping)
-            let isZoomedIn = false;
-            
-            // Improved swipe detection with threshold
+            // Threshold for swipe detection
             const SWIPE_THRESHOLD = 50;
-           
-            // Variables for highlighting
-            let isHighlighterEnabled = false;
-            let isHighlighting = false;
-            let highlightStartX = 0;
-            let highlightStartY = 0;
-            let highlightLayer = null;
-            let highlights = [];
-           
+            
             // Auto-hide page info after delay
             let pageInfoTimeout;
             function showPageInfo() {
@@ -778,29 +758,12 @@ export default function PdfViewer() {
               }, 2000);
             }
 
-            // Function to show zoom level
-            function showZoomLevel() {
-              const percentage = Math.round((scale / initialScale) * 100);
-              zoomIndicator.textContent = 'Zoom: ' + percentage + '%';
-              zoomIndicator.classList.add('visible');
-              
-              // Check if zoomed in to disable page swiping
-              isZoomedIn = scale > initialScale * 1.05; // Allow a small buffer for rounding errors
-              
-              // Show zoom indicator for 2 seconds
-              clearTimeout(zoomIndicatorTimeout);
-              zoomIndicatorTimeout = setTimeout(() => {
-                zoomIndicator.classList.remove('visible');
-              }, 2000);
-            }
-            let zoomIndicatorTimeout;
+            // Update page info and progress immediately with saved values
+            pageInfo.textContent = 'Trang ' + currentPage + ' / ' + totalPagesCount;
+            showPageInfo();
+            progressBar.style.width = currentProgressPercentage + '%';
 
-            // Function to store the current viewer state
-            function logState() {
-              console.log('Current state: Page ' + currentPage + ' of ' + (pdfDoc ? pdfDoc.numPages : 'unknown') + ' at scale ' + scale);
-            }
-           
-            // Optimized rendering function
+            // Function for PDF rendering
             function renderPage(num) {
               if (!pdfDoc) return;
              
@@ -808,36 +771,30 @@ export default function PdfViewer() {
               if (num > pdfDoc.numPages) num = pdfDoc.numPages;
              
               pageRendering = true;
-              pageInfo.textContent = 'Page ' + num + ' of ' + pdfDoc.numPages;
+              pageInfo.textContent = 'Trang ' + num + ' / ' + pdfDoc.numPages;
               showPageInfo();
              
               currentPage = num;
              
-              const progress = Math.floor((currentPage / pdfDoc.numPages) * 100);
+              const progress = Math.floor((currentPage / pdfDoc.numPages * 100) || 0);
               progressBar.style.width = progress + '%';
              
-              // Always notify React Native when page changes
+              // Notify React Native when page changes
               window.ReactNativeWebView.postMessage('PAGE_CHANGE:' + currentPage + ':' + pdfDoc.numPages);
              
-              const oldCanvas = container.querySelector('.page-canvas');
-              if (oldCanvas) {
-                oldCanvas.style.opacity = '0.3';
-              } else {
-                while (container.firstChild) {
-                  container.removeChild(container.firstChild);
-                }
+              // Clear the container completely before adding a new page
+              while (container.firstChild) {
+                container.removeChild(container.firstChild);
               }
              
               requestAnimationFrame(() => {
                 pdfDoc.getPage(num).then(function(page) {
-                  // Calculate viewport to fit width perfectly (especially for Android)
+                  // Calculate viewport to fit width
                   const pageWidth = page.getViewport({ scale: 1.0 }).width;
                   const containerWidth = container.clientWidth;
                   
-                  // Get the best scale to fit the page width to container
+                  // Get optimal scale
                   const optimalScale = containerWidth / pageWidth;
-                  
-                  // For Android, we want to make sure the page fills the width completely
                   const finalScale = isAndroid ? Math.max(scale, optimalScale) : scale;
                   
                   const viewport = page.getViewport({ scale: finalScale });
@@ -846,38 +803,15 @@ export default function PdfViewer() {
                   canvas.className = 'page-canvas';
                   canvas.style.opacity = '0';
                  
-                  // Set canvas dimensions with pixel ratio for higher resolution
-                  const outputScale = pixelRatio;
-                  canvas.width = Math.floor(viewport.width * outputScale);
-                  canvas.height = Math.floor(viewport.height * outputScale);
+                  canvas.width = Math.floor(viewport.width);
+                  canvas.height = Math.floor(viewport.height);
                  
-                  // Set canvas style width to 100% of container for Android
                   canvas.style.width = '100%';
-                  canvas.style.maxWidth = 'none';
-                 
+                  
                   container.appendChild(canvas);
                  
-                  // Create/recreate highlight layer
-                  const oldHighlightLayer = container.querySelector('.highlight-layer');
-                  if (oldHighlightLayer) {
-                    container.removeChild(oldHighlightLayer);
-                  }
-                 
-                  highlightLayer = document.createElement('div');
-                  highlightLayer.className = 'highlight-layer';
-                  highlightLayer.style.width = viewport.width + 'px';
-                  highlightLayer.style.height = viewport.height + 'px';
-                  highlightLayer.style.position = 'absolute';
-                  highlightLayer.style.left = canvas.offsetLeft + 'px';
-                  highlightLayer.style.top = canvas.offsetTop + 'px';
-                  container.appendChild(highlightLayer);
-                 
-                  // Restore highlights for this page
-                  renderHighlights(num);
-                 
                   const ctx = canvas.getContext('2d');
-                  ctx.scale(outputScale, outputScale);
-                 
+                  
                   const renderContext = {
                     canvasContext: ctx,
                     viewport: viewport
@@ -887,11 +821,7 @@ export default function PdfViewer() {
                  
                   renderTask.promise.then(function() {
                     pageRendering = false;
-                   
-                    if (oldCanvas) {
-                      container.removeChild(oldCanvas);
-                    }
-                   
+                    
                     requestAnimationFrame(() => {
                       canvas.style.transition = 'opacity 0.2s';
                       canvas.style.opacity = '1';
@@ -930,150 +860,50 @@ export default function PdfViewer() {
               return true;
             }
            
-            // Improved touch navigation setup with better double-tap detection
+            // Touch handling
             function handleTouchStart(evt) {
-              // Skip if highlighter is enabled
-              if (isHighlighterEnabled) {
-                if (!isHighlighting) {
-                  isHighlighting = true;
-                  const touch = evt.touches[0];
-                  highlightStartX = touch.clientX - container.getBoundingClientRect().left;
-                  highlightStartY = touch.clientY - container.getBoundingClientRect().top + container.scrollTop;
-                }
-                return;
-              }
-             
               touchStartX = evt.changedTouches[0].screenX;
               touchStartY = evt.changedTouches[0].screenY;
              
-              // Improved double-tap detection
               const currentTime = new Date().getTime();
               const tapLength = currentTime - lastTap;
               
               if (tapLength < 300 && tapLength > 0) {
                 tappedTwice = true;
-                // Handle double tap - toggle zoom
                 evt.preventDefault();
                 
-                // Toggle between fit width and higher zoom
-                if (scale > initialScale) {
-                  scale = initialScale;
+                if (scale > 1.5) {
+                  scale = 1.5;
                 } else {
-                  // On Android use a higher zoom level for better readability
-                  scale = isAndroid ? initialScale * 2.5 : initialScale * 2.0;
+                  scale = isAndroid ? 2.5 : 2.0;
                 }
                 
-                // Update zoom indicator and render page
-                showZoomLevel();
                 queueRenderPage(currentPage);
               } else {
                 tappedTwice = false;
                 setTimeout(() => {
                   if (!tappedTwice) {
-                    // This was a single tap and will be handled in touchend
-                    // for menu toggling if no swipe is detected
+                    // Single tap will be handled in touchend
                   }
                 }, 300);
               }
               lastTap = currentTime;
             }
            
-            function handleTouchMove(evt) {
-              if (isHighlighterEnabled && isHighlighting) {
-                const touch = evt.touches[0];
-                const currentX = touch.clientX - container.getBoundingClientRect().left;
-                const currentY = touch.clientY - container.getBoundingClientRect().top + container.scrollTop;
-               
-                // Remove previous temporary highlight
-                const tempHighlight = highlightLayer.querySelector('.temp-highlight');
-                if (tempHighlight) {
-                  highlightLayer.removeChild(tempHighlight);
-                }
-               
-                // Create new temporary highlight
-                const highlight = document.createElement('div');
-                highlight.className = 'highlight temp-highlight';
-               
-                // Calculate position and dimensions
-                const left = Math.min(highlightStartX, currentX);
-                const top = Math.min(highlightStartY, currentY);
-                const width = Math.abs(currentX - highlightStartX);
-                const height = Math.abs(currentY - highlightStartY);
-               
-                highlight.style.left = left + 'px';
-                highlight.style.top = top + 'px';
-                highlight.style.width = width + 'px';
-                highlight.style.height = height + 'px';
-               
-                highlightLayer.appendChild(highlight);
-              }
-            }
-           
             function handleTouchEnd(evt) {
               touchEndX = evt.changedTouches[0].screenX;
               touchEndY = evt.changedTouches[0].screenY;
-             
-              // If highlighting, complete the highlight
-              if (isHighlighterEnabled && isHighlighting) {
-                const touch = evt.changedTouches[0];
-                const currentX = touch.clientX - container.getBoundingClientRect().left;
-                const currentY = touch.clientY - container.getBoundingClientRect().top + container.scrollTop;
-               
-                // Only create highlight if it has some size
-                const width = Math.abs(currentX - highlightStartX);
-                const height = Math.abs(currentY - highlightStartY);
-               
-                if (width > 5 && height > 5) {
-                  // Remove temporary highlight
-                  const tempHighlight = highlightLayer.querySelector('.temp-highlight');
-                  if (tempHighlight) {
-                    highlightLayer.removeChild(tempHighlight);
-                  }
-                 
-                  // Create permanent highlight
-                  const left = Math.min(highlightStartX, currentX);
-                  const top = Math.min(highlightStartY, currentY);
-                 
-                  const highlight = document.createElement('div');
-                  highlight.className = 'highlight';
-                  highlight.style.left = left + 'px';
-                  highlight.style.top = top + 'px';
-                  highlight.style.width = width + 'px';
-                  highlight.style.height = height + 'px';
-                 
-                  highlightLayer.appendChild(highlight);
-                 
-                  // Store highlight data
-                  highlights.push({
-                    page: currentPage,
-                    left: left,
-                    top: top,
-                    width: width,
-                    height: height
-                  });
-                 
-                  // Save highlights
-                  saveHighlights();
-                }
-               
-                isHighlighting = false;
-                return;
-              }
              
               // Calculate distance moved
               const deltaX = Math.abs(touchEndX - touchStartX);
               const deltaY = Math.abs(touchEndY - touchStartY);
              
-              // Only handle swipe if not zoomed in
-              if (!isZoomedIn) {
-                // If it's a swipe (significant horizontal movement and not too much vertical movement)
-                if (deltaX > SWIPE_THRESHOLD && deltaY < 75) {
-                  // This was a swipe - handle page navigation
-                  handleSwipe();
-                }
+              // If it's a swipe (significant horizontal movement)
+              if (deltaX > SWIPE_THRESHOLD && deltaY < 75) {
+                handleSwipe();
               }
               
-              // If it's a tap (very little movement in any direction)
+              // If it's a tap (very little movement)
               if (deltaX < 10 && deltaY < 10 && !tappedTwice) {
                 // Toggle menu on tap
                 window.ReactNativeWebView.postMessage('TOGGLE_MENU');
@@ -1081,13 +911,9 @@ export default function PdfViewer() {
             }
            
             function handleSwipe() {
-              // Only process swipes for navigation if we're not zoomed in
-              if (isZoomedIn) return;
-              
               if (touchEndX < touchStartX - SWIPE_THRESHOLD) {
                 // Swipe left - go to next page
                 if (goToNextPage()) {
-                  // Prevent other tap events if page navigated
                   tappedTwice = true;
                   setTimeout(() => { tappedTwice = false; }, 100);
                 }
@@ -1095,153 +921,99 @@ export default function PdfViewer() {
               if (touchEndX > touchStartX + SWIPE_THRESHOLD) {
                 // Swipe right - go to previous page
                 if (goToPrevPage()) {
-                  // Prevent other tap events if page navigated
                   tappedTwice = true;
                   setTimeout(() => { tappedTwice = false; }, 100);
                 }
               }
             }
            
-            // Highlighter functions
-            function toggleHighlighter(enabled) {
-              isHighlighterEnabled = enabled;
-              if (enabled) {
-                container.classList.add('highlighter-enabled');
-              } else {
-                container.classList.remove('highlighter-enabled');
-                isHighlighting = false;
-              }
-            }
-           
-            function saveHighlights() {
-              const highlightsData = JSON.stringify(highlights);
-              localStorage.setItem('pdf_highlights_' + document.location.href, highlightsData);
-            }
-           
-            function loadHighlights() {
-              try {
-                const highlightsData = localStorage.getItem('pdf_highlights_' + document.location.href);
-                if (highlightsData) {
-                  highlights = JSON.parse(highlightsData);
-                  renderHighlights(currentPage);
-                }
-              } catch (e) {
-                console.error('Error loading highlights:', e);
-              }
-            }
-           
-            function renderHighlights(pageNum) {
-              if (!highlightLayer) return;
-             
-              // Clear existing highlights
-              highlightLayer.innerHTML = '';
-             
-              // Add highlights for current page
-              highlights.filter(h => h.page === pageNum).forEach(h => {
-                const highlight = document.createElement('div');
-                highlight.className = 'highlight';
-                highlight.style.left = h.left + 'px';
-                highlight.style.top = h.top + 'px';
-                highlight.style.width = h.width + 'px';
-                highlight.style.height = h.height + 'px';
-                highlightLayer.appendChild(highlight);
-              });
-            }
-           
             // Add touch event listeners
             document.addEventListener('touchstart', handleTouchStart, false);
-            document.addEventListener('touchmove', handleTouchMove, false);
             document.addEventListener('touchend', handleTouchEnd, false);
-           
-            // Handle window resize to make sure PDF fits the screen properly
-            window.addEventListener('resize', function() {
-              if (pdfDoc && !pageRendering) {
-                // Re-render the current page to adjust to new screen size
-                queueRenderPage(currentPage);
-              }
-            });
-           
-            // Optimized PDF loading
-            async function renderPDF() {
+
+            // Helper function to show errors
+            function showError(text) {
+              errorMessage.textContent = text;
+              errorContainer.style.display = 'block';
+              loading.style.display = 'none';
+              window.ReactNativeWebView.postMessage('PDF_ERROR: ' + text);
+            }
+
+            // Request PDF data from React Native
+            async function loadPdf() {
               try {
-                setTimeout(() => {
-                  window.ReactNativeWebView.postMessage('REQUEST_PDF_DATA');
-                }, 100);
-               
-                window.handlePdfData = async function(base64Data) {
-                  try {
-                    loadingProgress.textContent = 'Preparing document...';
-                   
-                    setTimeout(async () => {
-                      try {
-                        const binaryString = window.atob(base64Data);
-                        const bytes = new Uint8Array(binaryString.length);
-                       
-                        const chunkSize = 10000;
-                        for (let i = 0; i < binaryString.length; i += chunkSize) {
-                          const chunk = Math.min(chunkSize, binaryString.length - i);
-                          for (let j = 0; j < chunk; j++) {
-                            bytes[i + j] = binaryString.charCodeAt(i + j);
-                          }
-                         
-                          if (i + chunk < binaryString.length) {
-                            const progress = Math.floor((i / binaryString.length) * 100);
-                            loadingProgress.textContent = 'Processing PDF... ' + progress + '%';
-                            await new Promise(resolve => setTimeout(resolve, 0));
-                          }
-                        }
-                       
-                        loadingProgress.textContent = 'Loading document...';
-                       
-                        const loadingTask = pdfjsLib.getDocument({ data: bytes.buffer });
-                        pdfDoc = await loadingTask.promise;
-                       
-                        window.ReactNativeWebView.postMessage('TOTAL_PAGES:' + pdfDoc.numPages);
-                       
-                        if (currentPage > pdfDoc.numPages) {
-                          currentPage = 1;
-                        }
-                       
-                        loading.style.display = 'none';
-                       
-                        console.log('Opening PDF at page ' + currentPage);
-                        renderPage(currentPage);
-                        loadHighlights();
-                       
-                        window.ReactNativeWebView.postMessage('PDF_LOADED');
-                        
-                        // Special handling for Android - force initial render to fit width properly
-                        if (isAndroid) {
-                          setTimeout(() => {
-                            const containerWidth = container.clientWidth;
-                            const canvas = container.querySelector('.page-canvas');
-                            if (canvas) {
-                              // Make sure the canvas width is optimal
-                              canvas.style.width = '100%';
-                            }
-                          }, 500);
-                        }
-                      } catch (error) {
-                        console.error('Error rendering PDF:', error);
-                        window.ReactNativeWebView.postMessage('PDF_ERROR: ' + error.message);
-                        loading.style.display = 'none';
-                      }
-                    }, 0);
-                  } catch (error) {
-                    console.error('Error processing PDF data:', error);
-                    window.ReactNativeWebView.postMessage('PDF_ERROR: ' + error.message);
-                    loading.style.display = 'none';
-                  }
-                };
+                // logDebug('Đang yêu cầu dữ liệu PDF từ app');
+                window.ReactNativeWebView.postMessage('REQUEST_PDF_DATA');
               } catch (error) {
-                console.error('Initial PDF loading error:', error);
-                window.ReactNativeWebView.postMessage('PDF_ERROR: ' + error.message);
-                loading.style.display = 'none';
+                // logDebug('Lỗi khi yêu cầu dữ liệu PDF: ' + error.message);
+                showError(error.message);
               }
             }
-           
-            // Start rendering when page loads
-            renderPDF();
+            
+            // Function to handle PDF data sent from React Native
+            window.handlePdfData = async function(base64Data) {
+              try {
+                loadingProgress.textContent = 'Đang chuẩn bị tài liệu...';
+               
+                setTimeout(async () => {
+                  try {
+                    const binaryString = window.atob(base64Data);
+                    const bytes = new Uint8Array(binaryString.length);
+                   
+                    // Process in chunks to avoid UI freezing
+                    const chunkSize = 10000;
+                    for (let i = 0; i < binaryString.length; i += chunkSize) {
+                      const chunk = Math.min(chunkSize, binaryString.length - i);
+                      for (let j = 0; j < chunk; j++) {
+                        bytes[i + j] = binaryString.charCodeAt(i + j);
+                      }
+                     
+                      if (i + chunk < binaryString.length) {
+                        const progress = Math.floor((i / binaryString.length) * 100);
+                        loadingProgress.textContent = 'Đang xử lý PDF... ' + progress + '%';
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                      }
+                    }
+                   
+                    loadingProgress.textContent = 'Đang tải tài liệu...';
+                   
+                    const loadingTask = pdfjsLib.getDocument({ data: bytes.buffer });
+                    pdfDoc = await loadingTask.promise;
+                    totalPagesCount = pdfDoc.numPages;
+                    
+                    // Store the intended page to navigate to
+                    const targetPage = currentPage;
+                   
+                    // logDebug('PDF đã tải thành công. Số trang: ' + pdfDoc.numPages);
+                    window.ReactNativeWebView.postMessage('TOTAL_PAGES:' + pdfDoc.numPages);
+                   
+                    // Make sure currentPage is valid
+                    if (targetPage > pdfDoc.numPages) {
+                      currentPage = 1;
+                    } else {
+                      currentPage = targetPage; // Ensure we keep the desired page
+                    }
+                   
+                    loading.style.display = 'none';
+                   
+                    // Use the stored target page instead of currentPage
+                    logDebug('Chuyển đến trang đã lưu: ' + currentPage);
+                    renderPage(currentPage);
+                   
+                    window.ReactNativeWebView.postMessage('PDF_LOADED');
+                  } catch (error) {
+                    logDebug('Lỗi khi hiển thị PDF: ' + error.message);
+                    showError(error.message);
+                  }
+                }, 0);
+              } catch (error) {
+                logDebug('Lỗi khi xử lý dữ liệu PDF: ' + error.message);
+                showError(error.message);
+              }
+            };
+            
+            // Start loading
+            loadPdf();
           </script>
         </body>
       </html>
@@ -1477,12 +1249,10 @@ export default function PdfViewer() {
 
   const showDebugInfo = () => {
     Alert.alert(
-      "Debug Info",
-      `View method: ${viewMethod}\nFile URI: ${fileUri || "None"}\nPDF ID: ${
-        pdfId || "None"
-      }\nLocal path: ${
+      "Thông tin PDF",
+      `PDF ID: ${pdfId || "None"}\nTrang: ${currentPage}/${totalPages}\nTiến độ: ${readingProgress}%\nLocal path: ${
         localPath || "None"
-      }\nReading progress: ${readingProgress}%\nPage: ${currentPage}/${totalPages}`,
+      }\nFile URI: ${fileUri || "Không có"}`,
       [{ text: "OK" }]
     );
   };
@@ -1527,10 +1297,11 @@ export default function PdfViewer() {
 
     if (
       message.includes("PDF_LOAD_ERROR") ||
-      message.includes("PDF_LOAD_TIMEOUT")
+      message.includes("PDF_LOAD_TIMEOUT") ||
+      message.includes("PDF_ERROR")
     ) {
       console.warn(`PDF loading issue detected: ${message}`);
-      setError("Failed to load PDF. " + message);
+      setError("Không thể tải PDF. " + message);
     }
 
     // Track when PDF has fully loaded
@@ -1573,7 +1344,7 @@ export default function PdfViewer() {
           }
         } catch (error) {
           console.error("Error reading PDF for WebView:", error);
-          setError("Error reading PDF file: " + error.message);
+          setError("Lỗi khi đọc file PDF: " + error.message);
         }
       })();
     }
@@ -1635,7 +1406,7 @@ export default function PdfViewer() {
           for (let i = 1; i <= totalPages; i += 10) {
             autoChapters.push({
               id: i,
-              title: `Page ${i}`,
+              title: `Trang ${i}`,
               page: i,
             });
           }
@@ -1656,12 +1427,43 @@ export default function PdfViewer() {
         for (let i = 1; i <= totalPages; i += 10) {
           autoChapters.push({
             id: i,
-            title: `Page ${i}`,
+            title: `Trang ${i}`,
             page: i,
           });
         }
         setChapters(autoChapters);
       }
+    }
+
+    // Xử lý thông tin debug
+    if (message.startsWith("DEBUG:")) {
+      console.log("WebView Debug:", message.substring(6));
+      return;
+    }
+
+    // Handle request for PDF data
+    if (message === "REQUEST_PDF_DATA" && fileUri) {
+      (async () => {
+        try {
+          console.log("WebView requested PDF data, loading from:", fileUri);
+          const base64Data = await FileSystem.readAsStringAsync(fileUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          // Inject our saved page number before handling the PDF data
+          if (webViewRef.current) {
+            console.log(`Ensuring initial page is set to: ${currentPage}`);
+            webViewRef.current.injectJavaScript(`
+              currentPage = ${currentPage};
+              handlePdfData("${base64Data}"); 
+              true;
+            `);
+          }
+        } catch (error) {
+          console.error("Error reading PDF file for WebView:", error);
+          setError(`Lỗi khi đọc file PDF: ${error.message}`);
+        }
+      })();
     }
   };
 
@@ -1691,44 +1493,38 @@ export default function PdfViewer() {
     setControlsVisible((prev) => !prev);
   };
 
-  // Function to toggle highlighter tool
-  const toggleHighlighter = () => {
-    const newState = !isHighlighterActive;
-    setIsHighlighterActive(newState);
-    if (webViewRef.current) {
-      webViewRef.current.injectJavaScript(`
-        toggleHighlighter(${newState});
-        true;
-      `);
-    }
-  };
-
-  // Add this useEffect to sync the PDF view with current page changes
-  useEffect(() => {
-    if (
-      webViewRef.current &&
-      pdfLoadedRef.current &&
-      currentPage > 0 &&
-      totalPages > 0
-    ) {
-      console.log(`Syncing PDF page to ${currentPage}`);
-      webViewRef.current.injectJavaScript(`
-        queueRenderPage(${currentPage});
-        true;
-      `);
-    }
-  }, [currentPage, totalPages]);
-
   // Add specific functions for page navigation
   const goToNextPage = () => {
     if (currentPage < totalPages) {
-      setCurrentPage((prevPage) => prevPage + 1);
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      
+      // Make sure to directly tell the WebView to change page too
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          if (typeof queueRenderPage === 'function') {
+            queueRenderPage(${nextPage});
+          }
+          true;
+        `);
+      }
     }
   };
 
   const goToPrevPage = () => {
     if (currentPage > 1) {
-      setCurrentPage((prevPage) => prevPage - 1);
+      const prevPage = currentPage - 1; 
+      setCurrentPage(prevPage);
+      
+      // Make sure to directly tell the WebView to change page too
+      if (webViewRef.current) {
+        webViewRef.current.injectJavaScript(`
+          if (typeof queueRenderPage === 'function') {
+            queueRenderPage(${prevPage});
+          }
+          true;
+        `);
+      }
     }
   };
 
@@ -1758,7 +1554,7 @@ export default function PdfViewer() {
             for (let i = 1; i <= totalPages; i += chapterInterval) {
               autoChapters.push({
                 id: autoChapters.length + 1,
-                title: 'Page ' + i,
+                title: 'Trang ' + i,
                 page: i
               });
             }
@@ -1780,7 +1576,7 @@ export default function PdfViewer() {
                   const page = await pdfDoc.getPageIndex(ref);
                   chapters.push({
                     id: id++,
-                    title: item.title || 'Chapter ' + id,
+                    title: item.title || 'Chương ' + id,
                     page: page + 1
                   });
                 } catch (e) {
@@ -1833,7 +1629,7 @@ export default function PdfViewer() {
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {pdfInfo?.title || "PDF Viewer"}
+          {pdfInfo?.title || "Trình xem PDF"}
         </Text>
 
         <TouchableOpacity style={styles.debugButton} onPress={showDebugInfo}>
@@ -1851,14 +1647,14 @@ export default function PdfViewer() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#0000ff" />
-          <Text style={styles.loadingText}>Loading PDF...</Text>
+          <Text style={styles.loadingText}>Đang tải PDF...</Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
           <Icon name="error-outline" size={64} color="#ff0000" />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.shareButton} onPress={sharePdf}>
-            <Text style={styles.shareButtonText}>Share PDF</Text>
+            <Text style={styles.shareButtonText}>Chia sẻ PDF</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -1880,7 +1676,9 @@ export default function PdfViewer() {
               const { nativeEvent } = syntheticEvent;
               console.error("WebView error:", nativeEvent);
               setError(
-                `WebView error: ${nativeEvent.description || "Unknown error"}`
+                `Lỗi WebView: ${
+                  nativeEvent.description || "Lỗi không xác định"
+                }`
               );
             }}
             onHttpError={(syntheticEvent) => {
@@ -1912,7 +1710,7 @@ export default function PdfViewer() {
             )}
           </View>
 
-          {/* Bottom menu bar with buttons instead of slider */}
+          {/* Bottom menu */}
           <View
             style={[
               styles.bottomMenu,
@@ -1950,20 +1748,8 @@ export default function PdfViewer() {
                 />
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={[
-                styles.highlighterButton,
-                isHighlighterActive && styles.highlighterActive,
-              ]}
-              onPress={toggleHighlighter}
-            >
-              <Icon
-                name="edit"
-                size={24}
-                color={isHighlighterActive ? "#fff" : "#3b82f6"}
-              />
-            </TouchableOpacity>
+            
+            {/* Loại bỏ highlighter button */}
           </View>
         </View>
       )}
@@ -1978,131 +1764,50 @@ export default function PdfViewer() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.menuTabs}>
-              <TouchableOpacity
-                style={[
-                  styles.menuTab,
-                  activeTab === "chapters" && styles.activeTab,
-                ]}
-                onPress={() => setActiveTab("chapters")}
-              >
-                <Text
-                  style={[
-                    styles.menuTabText,
-                    activeTab === "chapters" && styles.activeTabText,
-                  ]}
-                >
-                  Chapters
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.menuTab,
-                  activeTab === "pages" && styles.activeTab,
-                ]}
-                onPress={() => setActiveTab("pages")}
-              >
-                <Text
-                  style={[
-                    styles.menuTabText,
-                    activeTab === "pages" && styles.activeTabText,
-                  ]}
-                >
-                  Pages
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {activeTab === "chapters" ? (
-              <FlatList
-                data={chapters}
-                renderItem={({ item }) => {
-                  // So sánh với currentChapter để xác định chapter hiện tại
-                  const isCurrentChapter =
-                    currentChapter && currentChapter.id === item.id;
-
-                  return (
-                    <TouchableOpacity
-                      style={[
-                        styles.chapterItem,
-                        isCurrentChapter && styles.currentChapterItem,
-                      ]}
-                      onPress={() => {
-                        setCurrentPage(item.page);
-                        setShowMenu(false);
-                      }}
-                    >
-                      <View style={styles.chapterContent}>
-                        <Text
+            {/* Always show pages view */}
+            <ScrollView style={styles.pagesScrollView}>
+              <View style={styles.pagesGrid}>
+                {Array.from({ length: Math.ceil(totalPages / 30) }, (_, i) => (
+                  <View key={i} style={styles.pageSection}>
+                    <Text style={styles.pageSectionTitle}>
+                      {i * 30 + 1} - {Math.min((i + 1) * 30, totalPages)}
+                    </Text>
+                    <View style={styles.pageButtonsGrid}>
+                      {Array.from(
+                        { length: Math.min(30, totalPages - i * 30) },
+                        (_, j) => i * 30 + j + 1
+                      ).map((page) => (
+                        <TouchableOpacity
+                          key={page}
                           style={[
-                            styles.chapterTitle,
-                            isCurrentChapter && styles.currentChapterText,
+                            styles.pageButton,
+                            currentPage === page && styles.currentPageButton,
                           ]}
+                          onPress={() => {
+                            setCurrentPage(page);
+                            setShowMenu(false);
+                            webViewRef.current?.injectJavaScript(`
+                              queueRenderPage(${page});
+                              true;
+                            `);
+                          }}
                         >
-                          {item.title}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.chapterPage,
-                            isCurrentChapter && styles.currentChapterText,
-                          ]}
-                        >
-                          Page {item.page}
-                        </Text>
-                      </View>
-                      {isCurrentChapter && (
-                        <Icon name="check-circle" size={20} color="#3b82f6" />
-                      )}
-                    </TouchableOpacity>
-                  );
-                }}
-                keyExtractor={(item) => item.id}
-              />
-            ) : (
-              <ScrollView style={styles.pagesScrollView}>
-                <View style={styles.pagesGrid}>
-                  {Array.from(
-                    { length: Math.ceil(totalPages / 30) },
-                    (_, i) => (
-                      <View key={i} style={styles.pageSection}>
-                        <Text style={styles.pageSectionTitle}>
-                          {i * 30 + 1} - {Math.min((i + 1) * 30, totalPages)}
-                        </Text>
-                        <View style={styles.pageButtonsGrid}>
-                          {Array.from(
-                            { length: Math.min(30, totalPages - i * 30) },
-                            (_, j) => i * 30 + j + 1
-                          ).map((page) => (
-                            <TouchableOpacity
-                              key={page}
-                              style={[
-                                styles.pageButton,
-                                currentPage === page &&
-                                  styles.currentPageButton,
-                              ]}
-                              onPress={() => {
-                                setCurrentPage(page);
-                                setShowMenu(false);
-                              }}
-                            >
-                              <Text
-                                style={[
-                                  styles.pageButtonText,
-                                  currentPage === page &&
-                                    styles.currentPageButtonText,
-                                ]}
-                              >
-                                {page}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      </View>
-                    )
-                  )}
-                </View>
-              </ScrollView>
-            )}
+                          <Text
+                            style={[
+                              styles.pageButtonText,
+                              currentPage === page &&
+                                styles.currentPageButtonText,
+                            ]}
+                          >
+                            {page}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
           </View>
         </View>
       )}
@@ -2274,18 +1979,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#333",
   },
-  highlighterButton: {
-    marginLeft: 10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  highlighterActive: {
-    backgroundColor: "#3b82f6",
-  },
   menuButton: {
     marginLeft: 16,
   },
@@ -2320,58 +2013,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
-  menuTabs: {
-    flexDirection: "row",
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  menuTab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: "#3b82f6",
-  },
-  menuTabText: {
-    fontSize: 16,
-    color: "#6b7280",
-  },
-  activeTabText: {
-    color: "#3b82f6",
-    fontWeight: "bold",
-  },
-  chapterItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  currentChapterItem: {
-    backgroundColor: "#f0f9ff",
-    borderLeftWidth: 4,
-    borderLeftColor: "#3b82f6",
-  },
-  chapterContent: {
-    flex: 1,
-  },
-  chapterTitle: {
-    fontSize: 16,
-    color: "#333",
-    marginBottom: 4,
-  },
-  currentChapterText: {
-    color: "#3b82f6",
-    fontWeight: "bold",
-  },
-  chapterPage: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
   pagesScrollView: {
     flex: 1,
   },
@@ -2390,11 +2031,10 @@ const styles = StyleSheet.create({
   pageButtonsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginHorizontal: -4, // Compensate for pageButton margin
+    marginHorizontal: -4,
   },
   pageButton: {
-    width: "16.666%", // Show 6 buttons per row
-    aspectRatio: undefined, // Remove fixed aspect ratio
+    width: "16.666%",
     justifyContent: "center",
     alignItems: "center",
     padding: 6,
