@@ -116,7 +116,7 @@ export default function Book() {
     setModalOpen(true);
   };
 
-  const handleSave = async (bookData, file) => {
+  const handleSave = async (bookData) => {
     try {
       let updatedBookData = { ...bookData };
 
@@ -131,35 +131,6 @@ export default function Book() {
       // Convert pages to a number if provided
       if (updatedBookData.pages) {
         updatedBookData.pages = Number(updatedBookData.pages);
-      }
-
-      // Handle file upload if provided
-      if (file) {
-        try {
-          console.log("Uploading file:", file);
-          const formData = new FormData();
-          formData.append("pdf_file", file);
-
-          const uploadResult = await bookAPI.uploadBook(formData);
-          console.log("Upload result:", uploadResult);
-
-          if (uploadResult && uploadResult.success && uploadResult.file_path) {
-            if (uploadResult.file_type === "image") {
-              updatedBookData.image = uploadResult.file_path;
-            } else {
-              updatedBookData.file_path = uploadResult.file_path;
-            }
-          } else {
-            console.error(
-              "Upload succeeded but returned unexpected format:",
-              uploadResult
-            );
-          }
-        } catch (uploadError) {
-          console.error("File upload failed:", uploadError);
-          alert(`Không thể tải tệp lên: ${uploadError.message}`);
-          // Continue with the save operation without the file
-        }
       }
 
       console.log("Saving book with data:", updatedBookData);
@@ -180,11 +151,6 @@ export default function Book() {
             : null,
           is_free: !!updatedBookData.is_free,
         };
-
-        // Nếu không có file mới được tải lên, không gửi trường image để tránh lỗi validation
-        if (!file && processedData.image === selectedBook.image) {
-          delete processedData.image;
-        }
 
         await bookAPI.updateBook(selectedBook.book_id, processedData);
         setBooks(
