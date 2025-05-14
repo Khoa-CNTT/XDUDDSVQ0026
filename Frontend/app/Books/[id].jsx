@@ -94,7 +94,7 @@ export default function BookDetailScreen() {
             ? apiBook.category.name_category
             : "Chưa phân loại",
           pages: apiBook.pages || "0",
-          publisher: apiBook.publisher || "NXB Trẻ",
+          publisher: apiBook.publisher || "ReadHub",
           year: apiBook.year || "2023",
           file_path: apiBook.file_path,
           // Lưu trạng thái từ server
@@ -426,15 +426,15 @@ export default function BookDetailScreen() {
         </Text>
         <View className="flex-row">
           <TouchableOpacity
-            className="bg-blue-500 rounded-md p-3 w-32"
+            className={`rounded-md p-3 w-32 ${book.file_path ? "bg-blue-500" : "bg-gray-400"}`}
             onPress={handleReadBook}
-            disabled={isLoading}
+            disabled={isLoading || !book.file_path}
           >
             {isLoading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Text className="text-white font-extrabold text-center text-xl">
-                Đọc Ngay
+                {book.file_path ? "Đọc Ngay" : "Chưa có nội dung"}
               </Text>
             )}
           </TouchableOpacity>
