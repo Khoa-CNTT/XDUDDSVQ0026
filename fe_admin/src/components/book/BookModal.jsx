@@ -63,6 +63,11 @@ export default function BookModal({ isOpen, onClose, onSave, book, categories, a
         if (name === 'is_free' && checked) {
             setFormData(prev => ({ ...prev, price: 0 }));
         }
+
+        // Nếu thay đổi URL ảnh, cập nhật preview
+        if (name === 'image') {
+            setImagePreview(value);
+        }
     };
 
     const handleFileChange = (e) => {
@@ -87,7 +92,7 @@ export default function BookModal({ isOpen, onClose, onSave, book, categories, a
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onSave(formData, selectedFile);
+        onSave(formData);
     };
 
     const isReadOnly = mode === 'view';
@@ -247,7 +252,7 @@ export default function BookModal({ isOpen, onClose, onSave, book, categories, a
 
                         <div className="mb-4 col-span-1 md:col-span-2">
                             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="image">
-                                Ảnh Bìa
+                                Ảnh Bìa (URL)
                             </label>
                             <div className="flex flex-col items-center">
                                 {imagePreview && (
@@ -259,18 +264,19 @@ export default function BookModal({ isOpen, onClose, onSave, book, categories, a
                                 )}
                                 {!isReadOnly && (
                                     <input
-                                        type="file"
-                                        id="file"
-                                        ref={fileInputRef}
-                                        onChange={handleFileChange}
-                                        accept="image/*,.pdf"
-                                        className="block w-full text-sm text-gray-500
-                                            file:mr-4 file:py-2 file:px-4
-                                            file:rounded-md file:border-0
-                                            file:text-sm file:font-semibold
-                                            file:bg-blue-50 file:text-blue-700
-                                            hover:file:bg-blue-100"
+                                        type="text"
+                                        id="image"
+                                        name="image"
+                                        value={formData.image}
+                                        onChange={handleChange}
+                                        placeholder="Nhập URL ảnh (VD: https://example.com/image.jpg)"
+                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                     />
+                                )}
+                                {!isReadOnly && (
+                                    <p className="text-xs text-gray-500 mt-1 text-center">
+                                        Nhập URL ảnh từ internet hoặc máy chủ của bạn
+                                    </p>
                                 )}
                             </div>
                         </div>
