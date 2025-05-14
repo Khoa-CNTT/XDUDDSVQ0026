@@ -915,7 +915,7 @@ export default function BookViewer() {
                     loading.style.display = 'none';
                    
                     // Use the stored target page instead of currentPage
-                    logDebug('Chuyển đến trang đã lưu: ' + currentPage);
+                    // logDebug('Chuyển đến trang đã lưu: ' + currentPage);
                     renderPage(currentPage);
                    
                     window.ReactNativeWebView.postMessage('PDF_LOADED');

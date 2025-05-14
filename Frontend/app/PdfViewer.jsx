@@ -786,8 +786,14 @@ export default function PdfViewer() {
               while (container.firstChild) {
                 container.removeChild(container.firstChild);
               }
-             
-              requestAnimationFrame(() => {
+              
+              // Thêm delay nhỏ để đảm bảo container được xóa trước khi render trang mới
+              setTimeout(() => {
+                // Kiểm tra lại một lần nữa để đảm bảo container đã trống
+                while (container.firstChild) {
+                  container.removeChild(container.firstChild);
+                }
+
                 pdfDoc.getPage(num).then(function(page) {
                   // Calculate viewport to fit width
                   const pageWidth = page.getViewport({ scale: 1.0 }).width;
@@ -802,11 +808,22 @@ export default function PdfViewer() {
                   const canvas = document.createElement('canvas');
                   canvas.className = 'page-canvas';
                   canvas.style.opacity = '0';
+                  canvas.style.display = 'block'; // Đảm bảo canvas hiển thị chính xác
+                  canvas.dataset.pageNumber = num; // Thêm số trang để dễ gỡ lỗi
                  
                   canvas.width = Math.floor(viewport.width);
                   canvas.height = Math.floor(viewport.height);
                  
                   canvas.style.width = '100%';
+                  
+                  // Kiểm tra container trước khi thêm canvas
+                  if (container.childElementCount > 0) {
+                    // Xóa lại các phần tử cũ nếu vẫn còn
+                    console.log('Container vẫn còn ' + container.childElementCount + ' phần tử, xóa trước khi thêm mới');
+                    while (container.firstChild) {
+                      container.removeChild(container.firstChild);
+                    }
+                  }
                   
                   container.appendChild(canvas);
                  
@@ -835,27 +852,50 @@ export default function PdfViewer() {
                 });
                
                 container.scrollTop = 0;
-              });
+              }, 50);
             }
            
             // Queue functions
             function queueRenderPage(num) {
+              // Luôn đặt trang pending, để tránh vẽ nhiều trang cùng lúc
               if (pageRendering) {
                 pageNumPending = num;
+                console.log('Đang xử lý trang, thêm vào hàng đợi: ' + num);
               } else {
-                renderPage(num);
+                // Đảm bảo container trống trước khi render trang mới
+                console.log('Bắt đầu render trang: ' + num);
+                
+                // Đặt cờ pageRendering = true để ngăn tác vụ tiếp theo bắt đầu
+                pageRendering = true;
+                
+                // Thêm delay nhỏ trước khi render để đảm bảo việc xóa container hoàn tất
+                setTimeout(() => {
+                  renderPage(num);
+                }, 100);
               }
             }
            
             // Navigation functions
             function goToPrevPage() {
-              if (currentPage <= 1) return;
+              if (currentPage <= 1) return false;
+              
+              // Xóa container trước
+              while (container.firstChild) {
+                container.removeChild(container.firstChild);
+              }
+              
               queueRenderPage(currentPage - 1);
               return true;
             }
            
             function goToNextPage() {
-              if (currentPage >= pdfDoc.numPages) return;
+              if (currentPage >= pdfDoc.numPages) return false;
+              
+              // Xóa container trước
+              while (container.firstChild) {
+                container.removeChild(container.firstChild);
+              }
+              
               queueRenderPage(currentPage + 1);
               return true;
             }
@@ -954,6 +994,11 @@ export default function PdfViewer() {
             window.handlePdfData = async function(base64Data) {
               try {
                 loadingProgress.textContent = 'Đang chuẩn bị tài liệu...';
+                
+                // Đảm bảo container trống trước khi tải PDF mới
+                while (container.firstChild) {
+                  container.removeChild(container.firstChild);
+                }
                
                 setTimeout(async () => {
                   try {
@@ -997,15 +1042,23 @@ export default function PdfViewer() {
                     loading.style.display = 'none';
                    
                     // Use the stored target page instead of currentPage
-                    logDebug('Chuyển đến trang đã lưu: ' + currentPage);
-                    renderPage(currentPage);
-                   
-                    window.ReactNativeWebView.postMessage('PDF_LOADED');
+                    // logDebug('Chuyển đến trang đã lưu: ' + currentPage);
+                    
+                    // Đảm bảo container trống trước khi render trang PDF
+                    while (container.firstChild) {
+                      container.removeChild(container.firstChild);
+                    }
+                    
+                    // Thêm delay để đảm bảo container đã được xóa sạch
+                    setTimeout(() => {
+                      renderPage(currentPage);
+                      window.ReactNativeWebView.postMessage('PDF_LOADED');
+                    }, 50);
                   } catch (error) {
-                    logDebug('Lỗi khi hiển thị PDF: ' + error.message);
+                    // logDebug('Lỗi khi hiển thị PDF: ' + error.message);
                     showError(error.message);
                   }
-                }, 0);
+                }, 50);
               } catch (error) {
                 logDebug('Lỗi khi xử lý dữ liệu PDF: ' + error.message);
                 showError(error.message);
@@ -1660,6 +1713,7 @@ export default function PdfViewer() {
       ) : (
         <View style={styles.webViewContainer}>
           <WebView
+            key={fileUri || Math.random().toString()}
             ref={webViewRef}
             source={{ html: htmlContent }}
             style={styles.webView}
@@ -1764,50 +1818,129 @@ export default function PdfViewer() {
               </TouchableOpacity>
             </View>
 
-            {/* Always show pages view */}
-            <ScrollView style={styles.pagesScrollView}>
-              <View style={styles.pagesGrid}>
-                {Array.from({ length: Math.ceil(totalPages / 30) }, (_, i) => (
-                  <View key={i} style={styles.pageSection}>
-                    <Text style={styles.pageSectionTitle}>
-                      {i * 30 + 1} - {Math.min((i + 1) * 30, totalPages)}
-                    </Text>
-                    <View style={styles.pageButtonsGrid}>
-                      {Array.from(
-                        { length: Math.min(30, totalPages - i * 30) },
-                        (_, j) => i * 30 + j + 1
-                      ).map((page) => (
-                        <TouchableOpacity
-                          key={page}
-                          style={[
-                            styles.pageButton,
-                            currentPage === page && styles.currentPageButton,
-                          ]}
-                          onPress={() => {
-                            setCurrentPage(page);
-                            setShowMenu(false);
-                            webViewRef.current?.injectJavaScript(`
-                              queueRenderPage(${page});
-                              true;
-                            `);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.pageButtonText,
-                              currentPage === page &&
-                                styles.currentPageButtonText,
-                            ]}
-                          >
-                            {page}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+            {/* Tabs for navigation */}
+            <View style={styles.tabsContainer}>
+              <TouchableOpacity 
+                style={[
+                  styles.tabButton, 
+                  activeTab === "chapters" && styles.activeTabButton
+                ]} 
+                onPress={() => setActiveTab("chapters")}
+              >
+                <Text style={[
+                  styles.tabButtonText, 
+                  activeTab === "chapters" && styles.activeTabButtonText
+                ]}>
+                  Chương
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.tabButton, 
+                  activeTab === "pages" && styles.activeTabButton
+                ]} 
+                onPress={() => setActiveTab("pages")}
+              >
+                <Text style={[
+                  styles.tabButtonText, 
+                  activeTab === "pages" && styles.activeTabButtonText
+                ]}>
+                  Trang
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Content based on active tab */}
+            {activeTab === "chapters" ? (
+              <ScrollView style={styles.chaptersScrollView}>
+                {chapters.length === 0 ? (
+                  <View style={styles.noChaptersContainer}>
+                    <Text style={styles.noChaptersText}>Không tìm thấy chương trong tài liệu này</Text>
                   </View>
-                ))}
-              </View>
-            </ScrollView>
+                ) : (
+                  chapters.map((chapter) => (
+                    <TouchableOpacity
+                      key={chapter.id}
+                      style={[
+                        styles.chapterItem,
+                        currentChapter?.id === chapter.id && styles.currentChapterItem,
+                      ]}
+                      onPress={() => {
+                        setCurrentPage(chapter.page);
+                        setShowMenu(false);
+                        webViewRef.current?.injectJavaScript(`
+                          queueRenderPage(${chapter.page});
+                          true;
+                        `);
+                      }}
+                    >
+                      <Text 
+                        style={[
+                          styles.chapterTitle,
+                          currentChapter?.id === chapter.id && styles.currentChapterTitle,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {chapter.title}
+                      </Text>
+                      <Text 
+                        style={[
+                          styles.chapterPage,
+                          currentChapter?.id === chapter.id && styles.currentChapterPage,
+                        ]}
+                      >
+                        Trang {chapter.page}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            ) : (
+              <ScrollView style={styles.pagesScrollView}>
+                <View style={styles.pagesGrid}>
+                  {Array.from({ length: Math.ceil(totalPages / 30) }, (_, i) => (
+                    <View key={i} style={styles.pageSection}>
+                      <Text style={styles.pageSectionTitle}>
+                        {i * 30 + 1} - {Math.min((i + 1) * 30, totalPages)}
+                      </Text>
+                      <View style={styles.pageButtonsGrid}>
+                        {Array.from(
+                          { length: Math.min(30, totalPages - i * 30) },
+                          (_, j) => i * 30 + j + 1
+                        ).map((page) => (
+                          <TouchableOpacity
+                            key={page}
+                            style={[
+                              styles.pageButton,
+                              currentPage === page && styles.currentPageButton,
+                            ]}
+                            onPress={() => {
+                              setCurrentPage(page);
+                              setShowMenu(false);
+                              webViewRef.current?.injectJavaScript(`
+                                queueRenderPage(${page});
+                                true;
+                              `);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.pageButtonText,
+                                currentPage === page &&
+                                  styles.currentPageButtonText,
+                              ]}
+                            >
+                              {page}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
           </View>
         </View>
       )}
@@ -2013,6 +2146,71 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
+  // Tab styles
+  tabsContainer: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tabButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginRight: 10,
+  },
+  activeTabButton: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#3b82f6',
+  },
+  tabButtonText: {
+    fontSize: 16,
+    color: '#6b7280',
+  },
+  activeTabButtonText: {
+    color: '#3b82f6',
+    fontWeight: 'bold',
+  },
+  // Chapter styles
+  chaptersScrollView: {
+    flex: 1,
+  },
+  chapterItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  currentChapterItem: {
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderLeftWidth: 3,
+    borderLeftColor: '#3b82f6',
+  },
+  chapterTitle: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 4,
+  },
+  currentChapterTitle: {
+    fontWeight: 'bold',
+    color: '#3b82f6',
+  },
+  chapterPage: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  currentChapterPage: {
+    color: '#3b82f6',
+  },
+  noChaptersContainer: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noChaptersText: {
+    fontSize: 16,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  // Page styles 
   pagesScrollView: {
     flex: 1,
   },

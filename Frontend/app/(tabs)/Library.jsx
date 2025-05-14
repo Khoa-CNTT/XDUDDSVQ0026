@@ -884,7 +884,7 @@ export default function Library() {
         >
           <View className="flex-row items-center justify-center">
             <Ionicons name="add-circle-outline" size={25} color="#666" />
-            <Text className="text-xl ml-4">Thêm từ thiết bị</Text>
+            <Text className="text-xl ml-4">Thêm từ thiết bị (PDF/DOCX)</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#666" />
         </TouchableOpacity>
