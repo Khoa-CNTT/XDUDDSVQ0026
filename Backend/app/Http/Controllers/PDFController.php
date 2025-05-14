@@ -230,6 +230,9 @@ class PDFController extends Controller
                 throw new AuthorizationException('You are not authorized to delete this PDF.');
             }
 
+            // Delete reading history records
+            \App\Models\PdfReadingHistory::where('pdf_id', $pdf->id)->delete();
+            
             Storage::disk('public')->delete($pdf->file_path);
             $pdf->delete();
             return response()->json([
