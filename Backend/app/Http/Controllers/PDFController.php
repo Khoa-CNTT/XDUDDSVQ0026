@@ -9,9 +9,19 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Auth\Access\AuthorizationException;
+use App\Services\DocumentConversionService;
+use Illuminate\Support\Str;
 
 class PDFController extends Controller
 {
+    protected $documentConversionService;
+
+    public function __construct(DocumentConversionService $documentConversionService = null)
+    {
+        // Sử dụng dependency injection có điều kiện để tránh ảnh hưởng đến các phương thức khác
+        $this->documentConversionService = $documentConversionService;
+    }
+
     public function upload(Request $request)
     {
         try {
@@ -397,6 +407,113 @@ class PDFController extends Controller
         } catch (\Exception $e) {
             Log::error('Error validating token: ' . $e->getMessage());
             return null;
+        }
+    }
+
+    /**
+     * Upload and convert DOCX file to PDF
+     * Completely separate method from existing upload/store methods
+     */
+    public function uploadDocx(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+            
+            // Kiểm tra service có tồn tại không
+            if (!$this->documentConversionService) {
+                $this->documentConversionService = app(DocumentConversionService::class);
+            }
+            
+            // Log input data
+            Log::info('DOCX upload request data', [
+                'has_file' => $request->hasFile('file'),
+                'all_inputs' => $request->all()
+            ]);
+            
+            $request->validate([
+                'file' => 'required|file|mimes:docx,doc|max:10240',
+                'title' => 'nullable|string|max:255',
+                'description' => 'nullable|string'
+            ]);
+
+            $file = $request->file('file');
+            
+            // Lưu file DOCX gốc
+            $originalDocxPath = 'docx_originals/' . Str::random(40) . '.' . $file->getClientOriginalExtension();
+            $docxPath = Storage::disk('public')->putFileAs('', $file, $originalDocxPath);
+            $docxSize = $file->getSize();
+            
+            // Đường dẫn tuyệt đối đến file DOCX gốc
+            $absoluteDocxPath = Storage::disk('public')->path($originalDocxPath);
+            
+            // Thư mục đầu ra cho file PDF
+            $outputDir = Storage::disk('public')->path('pdfs');
+            
+            // Đảm bảo thư mục tồn tại
+            if (!file_exists($outputDir)) {
+                mkdir($outputDir, 0755, true);
+            }
+            
+            Log::info('Converting DOCX to PDF', [
+                'docx_path' => $absoluteDocxPath,
+                'output_dir' => $outputDir
+            ]);
+            
+            // Chuyển đổi DOCX sang PDF
+            $convertedPdfPath = $this->documentConversionService->convertDocxToPdf($absoluteDocxPath, $outputDir);
+            
+            if (!$convertedPdfPath) {
+                throw new \Exception('Failed to convert DOCX to PDF');
+            }
+            
+            // Lấy tên file không có đường dẫn
+            $convertedFileName = basename($convertedPdfPath);
+            
+            // Đường dẫn lưu trữ cho file PDF (tương đối)
+            $pdfRelativePath = 'pdfs/' . $convertedFileName;
+            
+            // Kích thước file PDF
+            $pdfSize = filesize($convertedPdfPath);
+            
+            Log::info('DOCX converted to PDF successfully', [
+                'pdf_path' => $pdfRelativePath,
+                'pdf_size' => $pdfSize
+            ]);
+            
+            // Tạo bản ghi PDF mới
+            $pdf = PDF::create([
+                'user_id' => Auth::user()->user_id,
+                'title' => $request->title ?? pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME),
+                'description' => $request->description ?? 'Converted from DOCX document',
+                'file_path' => $pdfRelativePath,
+                'file_size' => $pdfSize,
+                'original_path' => $originalDocxPath,
+                'original_size' => $docxSize,
+                'mime_type' => 'application/pdf',
+                'file_type' => 'docx_converted'
+            ]);
+            
+            Log::info('PDF record created from DOCX', ['pdf_id' => $pdf->id]);
+            
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'DOCX uploaded and converted to PDF successfully',
+                'data' => $pdf
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('DOCX upload and conversion failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload and convert DOCX: ' . $e->getMessage(),
+                'error' => $e->getMessage()
+            ], 500);
         }
     }
 } 

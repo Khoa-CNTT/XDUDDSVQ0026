@@ -42,7 +42,6 @@ Route::get('/books/author/{authorId}', [BookController::class, 'theoTacGia']);
 Route::get('/books/{id}', [BookController::class, 'chiTiet']);
 Route::get('/books/{id}/view-pdf', [BookController::class, 'viewPdf']);
 Route::get('/books/{bookId}/pdf', [BookController::class, 'viewPdf']);
-
 // Public Category routes
 Route::get('/categories', [CategoryController::class, 'danhSach']);
 Route::get('/categories/{id}', [CategoryController::class, 'chiTiet']);
@@ -92,6 +91,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/pdfs/{pdf}', [PDFController::class, 'update']);
     Route::delete('/pdfs/{pdf}', [PDFController::class, 'destroy']);
     Route::get('/pdfs/{pdf}/download', [PDFController::class, 'download']);
+    Route::post('/docx/upload', [PDFController::class, 'uploadDocx']);
 
     // User book preferences routes
     Route::post('/books/{id}/save', [UserBookPreferenceController::class, 'luuSach']);
