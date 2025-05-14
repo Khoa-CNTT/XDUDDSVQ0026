@@ -74,7 +74,7 @@ class BookController extends Controller
             'price' => 'required_if:is_free,false|numeric|min:0',
             'is_free' => 'boolean',
             'pages' => 'nullable|integer|min:0',
-            'image' => 'nullable',
+            'image' => 'nullable|string',
             'file_path' => 'nullable',
         ]);
         
@@ -91,13 +91,17 @@ class BookController extends Controller
             // Generate a unique book ID
             $bookId = 'B' . Str::random(8);
             
-            // Handle image upload
-            $imagePath = $request->image ?? null;
+            // Xử lý image: có thể là upload file hoặc URL
+            $imagePath = null;
             if ($request->hasFile('image')) {
+                // Trường hợp upload file ảnh
                 $image = $request->file('image');
                 $imageName = time() . '.' . $image->getClientOriginalExtension();
                 $image->move(public_path('images/books'), $imageName);
                 $imagePath = 'images/books/' . $imageName;
+            } else if ($request->has('image') && !empty($request->image)) {
+                // Trường hợp image là URL
+                $imagePath = $request->image;
             }
             
             // Handle PDF upload
@@ -187,7 +191,7 @@ class BookController extends Controller
             'price' => 'numeric|min:0',
             'is_free' => 'boolean',
             'pages' => 'nullable|integer|min:1',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'image' => 'nullable|string',
             'file_path' => 'nullable|file|mimes:pdf|max:10240',
         ]);
         
@@ -199,10 +203,12 @@ class BookController extends Controller
             ], 422);
         }
         
-        // Handle image upload
+        // Handle image upload or URL
         if ($request->hasFile('image')) {
-            // Remove old image if exists
-            if ($book->image && file_exists(public_path($book->image))) {
+            // Xử lý trường hợp upload file ảnh
+            
+            // Remove old image if exists and it's a local file
+            if ($book->image && file_exists(public_path($book->image)) && !filter_var($book->image, FILTER_VALIDATE_URL)) {
                 unlink(public_path($book->image));
             }
             
@@ -210,6 +216,9 @@ class BookController extends Controller
             $imageName = time() . '.' . $image->getClientOriginalExtension();
             $image->move(public_path('images/books'), $imageName);
             $book->image = 'images/books/' . $imageName;
+        } else if ($request->has('image')) {
+            // Xử lý trường hợp image là URL
+            $book->image = $request->image;
         }
         
         // Handle PDF upload
