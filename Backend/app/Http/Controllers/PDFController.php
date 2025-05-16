@@ -29,7 +29,7 @@ class PDFController extends Controller
 
             // Validate request
             $request->validate([
-                'file' => 'required|file|mimes:pdf|max:10240', // Max 10MB
+                'file' => 'required|file|mimes:pdf|max:40960', // Max 40MB (from 10MB)
                 'title' => 'required|string|max:255',
                 'description' => 'nullable|string',
             ]);
@@ -113,7 +113,7 @@ class PDFController extends Controller
             ]);
             
             $request->validate([
-                'file' => 'required|file|mimes:pdf|max:10240',
+                'file' => 'required|file|mimes:pdf|max:40960', // Max 40MB (from 10MB)
                 'title' => 'nullable|string|max:255',
                 'description' => 'nullable|string'
             ]);
@@ -431,7 +431,7 @@ class PDFController extends Controller
             ]);
             
             $request->validate([
-                'file' => 'required|file|mimes:docx,doc|max:10240',
+                'file' => 'required|file|mimes:docx,doc|max:102400', // Max 100MB (from 10MB)
                 'title' => 'nullable|string|max:255',
                 'description' => 'nullable|string'
             ]);
