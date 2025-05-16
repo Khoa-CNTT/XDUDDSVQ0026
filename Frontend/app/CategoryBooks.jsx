@@ -92,20 +92,8 @@ export default function CategoryBooks() {
 
   // Handle book press
   const handleBookPress = (book) => {
-    if (book.file_path) {
-      // Navigate to PDF viewer
-      router.push({
-        pathname: "/PdfViewer",
-        params: {
-          pdfPath: book.file_path,
-          pdfTitle: book.title || book.name_book,
-          pdfId: book.id || book.book_id,
-        },
-      });
-    } else {
-      // Navigate to book details
-      router.push(`/Books/${book.id || book.book_id}`);
-    }
+    // Always navigate to book details first
+    router.push(`/Books/${book.id || book.book_id}`);
   };
 
   // Effect to load data on component mount
