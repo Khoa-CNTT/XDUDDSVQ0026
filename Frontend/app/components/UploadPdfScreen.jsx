@@ -197,7 +197,7 @@ export default function UploadPdfScreen() {
       if (selectedFile.size > MAX_FILE_SIZE) {
         Alert.alert(
           "Cảnh báo kích thước file",
-          "File của bạn vượt quá giới hạn 100MB. Server sẽ từ chối file có kích thước lớn hơn 100MB.",
+          "File của bạn vượt quá giới hạn 40MB. Server sẽ từ chối file có kích thước lớn hơn 40MB.",
           [
             { text: "Huỷ", style: "cancel" },
             { 
@@ -246,7 +246,7 @@ export default function UploadPdfScreen() {
     if (pdfFile.size > MAX_FILE_SIZE) {
       Alert.alert(
         "File quá lớn",
-        "File của bạn vượt quá giới hạn 100MB. Vui lòng chọn file nhỏ hơn.",
+        "File của bạn vượt quá giới hạn 40MB. Vui lòng chọn file nhỏ hơn.",
         [{ text: "OK" }]
       );
       return;
