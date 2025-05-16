@@ -8,6 +8,8 @@ import {
   Alert,
   Platform,
   FlatList,
+  ScrollView,
+  SafeAreaView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
@@ -22,6 +24,7 @@ export default function UploadPdfScreen() {
   const [loading, setLoading] = useState(false);
   const [pdfs, setPdfs] = useState([]);
   const [loadingPdfs, setLoadingPdfs] = useState(false);
+  const MAX_FILE_SIZE = 40 * 1024 * 1024; // 40MB in bytes
 
   useEffect(() => {
     fetchPDFs();
@@ -190,32 +193,62 @@ export default function UploadPdfScreen() {
         return;
       }
 
-      // Xác định loại file dựa trên tên file và mimeType
-      const fileName = selectedFile.name || '';
-      const mimeType = selectedFile.mimeType || '';
-      const isDocx = fileName.toLowerCase().endsWith('.docx') || 
-                  fileName.toLowerCase().endsWith('.doc') ||
-                  mimeType.includes('openxmlformats') ||
-                  mimeType.includes('msword');
-
-      setPdfFile({
-        name: selectedFile.name || `file_${new Date().getTime()}.${isDocx ? 'docx' : 'pdf'}`,
-        size: selectedFile.size || 0,
-        uri: selectedFile.uri,
-        type: isDocx ? 
-              (fileName.toLowerCase().endsWith('.doc') ? "application/msword" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document") :
-              "application/pdf",
-        isDocx: isDocx // Flag để theo dõi nếu đây là file DOCX
-      });
+      // Check file size
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        Alert.alert(
+          "Cảnh báo kích thước file",
+          "File của bạn vượt quá giới hạn 100MB. Server sẽ từ chối file có kích thước lớn hơn 100MB.",
+          [
+            { text: "Huỷ", style: "cancel" },
+            { 
+              text: "Vẫn tiếp tục", 
+              onPress: () => setFileWithWarning(selectedFile)
+            }
+          ]
+        );
+      } else {
+        setFileWithWarning(selectedFile);
+      }
     } catch (err) {
       console.error("Lỗi khi chọn file:", err);
       Alert.alert("Lỗi", "Không thể chọn file. Vui lòng thử lại.");
     }
   };
 
+  // Helper function to set file with proper formatting
+  const setFileWithWarning = (selectedFile) => {
+    const fileName = selectedFile.name || '';
+    const mimeType = selectedFile.mimeType || '';
+    const isDocx = fileName.toLowerCase().endsWith('.docx') || 
+                fileName.toLowerCase().endsWith('.doc') ||
+                mimeType.includes('openxmlformats') ||
+                mimeType.includes('msword');
+
+    setPdfFile({
+      name: selectedFile.name || `file_${new Date().getTime()}.${isDocx ? 'docx' : 'pdf'}`,
+      size: selectedFile.size || 0,
+      uri: selectedFile.uri,
+      type: isDocx ? 
+            (fileName.toLowerCase().endsWith('.doc') ? "application/msword" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document") :
+            "application/pdf",
+      isDocx: isDocx, // Flag để theo dõi nếu đây là file DOCX
+      exceedsLimit: selectedFile.size > MAX_FILE_SIZE
+    });
+  };
+
   const uploadPDF = async () => {
     if (!pdfFile) {
       Alert.alert("Lỗi", "Vui lòng chọn file PDF hoặc DOCX");
+      return;
+    }
+
+    // Double check file size before upload
+    if (pdfFile.size > MAX_FILE_SIZE) {
+      Alert.alert(
+        "File quá lớn",
+        "File của bạn vượt quá giới hạn 100MB. Vui lòng chọn file nhỏ hơn.",
+        [{ text: "OK" }]
+      );
       return;
     }
 
@@ -325,79 +358,95 @@ export default function UploadPdfScreen() {
     </View>
   );
 
-  return (
-    <View className="flex-1 bg-white pt-10 px-5">
-      <View className="mt-5">
-        <TouchableOpacity
-          className="bg-gray-100 p-5 rounded-lg items-center border border-gray-200 border-dashed mb-5 flex-row justify-center"
-          onPress={pickPDF}
-        >
-          <Icon
-            name="file-upload"
-            size={24}
-            color="#4B5563"
-            style={{ marginRight: 10 }}
-          />
-          <Text className="text-base text-gray-700">
-            Chọn file PDF hoặc DOCX từ thiết bị
+  const UploadSection = () => (
+    <View>
+      <TouchableOpacity
+        className="bg-gray-100 p-5 rounded-lg items-center border border-gray-200 border-dashed mb-5 flex-row justify-center"
+        onPress={pickPDF}
+      >
+        <Icon
+          name="file-upload"
+          size={24}
+          color="#4B5563"
+          style={{ marginRight: 10 }}
+        />
+        <Text className="text-base text-gray-700">
+          Chọn file PDF hoặc DOCX từ thiết bị
+        </Text>
+      </TouchableOpacity>
+
+      {pdfFile && (
+        <View className="bg-gray-50 p-4 rounded-lg mb-5 border border-gray-100">
+          <Text className="text-base font-bold mb-2">{pdfFile.name}</Text>
+          <Text className="text-sm text-gray-500 mb-2">
+            {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
           </Text>
-        </TouchableOpacity>
-
-        {pdfFile && (
-          <View className="bg-gray-50 p-4 rounded-lg mb-5 border border-gray-100">
-            <Text className="text-base font-bold mb-2">{pdfFile.name}</Text>
-            <Text className="text-sm text-gray-500 mb-2">
-              {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
+          {pdfFile.exceedsLimit && (
+            <Text className="text-xs text-red-500 font-bold">
+              Cảnh báo: File vượt quá giới hạn 40MB! Upload có thể thất bại.
             </Text>
-            {pdfFile.isDocx && (
-              <Text className="text-xs text-blue-500 italic">
-                File DOCX sẽ được chuyển đổi thành PDF ở server
-              </Text>
-            )}
-            {pdfFile.uri && (
-              <Text
-                className="text-xs text-gray-400 mt-2"
-                numberOfLines={1}
-                ellipsizeMode="middle"
-              >
-                {pdfFile.uri}
-              </Text>
-            )}
-          </View>
-        )}
-
-        {loading ? (
-          <ActivityIndicator size="large" color="#0000ff" className="my-5" />
-        ) : null}
-
-        <TouchableOpacity
-          className={`p-4 rounded-lg items-center mt-3 mb-5 ${
-            !pdfFile ? "bg-gray-400" : "bg-green-600"
-          }`}
-          onPress={uploadPDF}
-          disabled={!pdfFile || loading}
-        >
-          <Text className="text-base text-white font-bold">Tải lên</Text>
-        </TouchableOpacity>
-
-        <View className="mt-6">
-          <Text className="text-lg font-bold mb-3">Your PDFs</Text>
-
-          {loadingPdfs ? (
-            <ActivityIndicator size="large" color="#0000ff" className="my-5" />
-          ) : pdfs.length > 0 ? (
-            <FlatList
-              data={pdfs}
-              renderItem={renderPDFItem}
-              keyExtractor={(item) => item.id.toString()}
-            />
-          ) : (
-            <Text className="text-gray-500 text-center py-4">
-              No PDFs found
+          )}
+          {pdfFile.isDocx && (
+            <Text className="text-xs text-blue-500 italic">
+              File DOCX sẽ được chuyển đổi thành PDF ở server
+            </Text>
+          )}
+          {pdfFile.uri && (
+            <Text
+              className="text-xs text-gray-400 mt-2"
+              numberOfLines={1}
+              ellipsizeMode="middle"
+            >
+              {pdfFile.uri}
             </Text>
           )}
         </View>
-      </View>
+      )}
+
+      {loading ? (
+        <ActivityIndicator size="large" color="#0000ff" className="my-5" />
+      ) : null}
+
+      <TouchableOpacity
+        className={`p-4 rounded-lg items-center mt-3 mb-5 ${
+          !pdfFile ? "bg-gray-400" : "bg-green-600"
+        }`}
+        onPress={uploadPDF}
+        disabled={!pdfFile || loading}
+      >
+        <Text className="text-base text-white font-bold">Tải lên</Text>
+      </TouchableOpacity>
     </View>
+  );
+
+  return (
+    <SafeAreaView className="flex-1 bg-white">
+      <View className="flex-1 px-5 pt-10">
+        <FlatList
+          data={pdfs}
+          renderItem={renderPDFItem}
+          keyExtractor={(item) => item.id.toString()}
+          ListHeaderComponent={
+            <>
+              <View className="mt-5">
+                <UploadSection />
+                <Text className="text-lg font-bold mb-3">Your PDFs</Text>
+                {loadingPdfs && (
+                  <ActivityIndicator size="large" color="#0000ff" className="my-5" />
+                )}
+                {!loadingPdfs && pdfs.length === 0 && (
+                  <Text className="text-gray-500 text-center py-4">
+                    No PDFs found
+                  </Text>
+                )}
+              </View>
+            </>
+          }
+          ListEmptyComponent={null}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        />
+      </View>
+    </SafeAreaView>
   );
 }

@@ -148,7 +148,7 @@ export const register = async (userData) => {
       throw new Error(data.message || "Đăng ký thất bại");
     }
   } catch (error) {
-    console.error("Register error:", error);
+    // console.error("Register error:", error);
     return { success: false, message: error.message };
   }
 };
