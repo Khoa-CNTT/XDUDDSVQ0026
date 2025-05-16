@@ -64,7 +64,7 @@ export default function AppLayout() {
         name="UploadPdf"
         options={{
           headerTransparent: false,
-          headerTitle: "Tải lên sách PDF",
+          headerTitle: "Tải lên sách PDF và DOCX",
           headerShown: true,
           headerStyle: {
             backgroundColor: "#fff",
