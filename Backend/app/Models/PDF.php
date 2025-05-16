@@ -18,7 +18,10 @@ class PDF extends Model
         'description',
         'file_path',
         'file_size',
-        'mime_type'
+        'original_path',
+        'original_size',
+        'mime_type',
+        'file_type'
     ];
 
     protected $casts = [

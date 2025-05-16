@@ -9,7 +9,7 @@ const Landing = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [charIndex, setCharIndex] = useState(0);
   const typingSpeed = 100;  // Tốc độ gõ từng chữ
-  const deleteSpeed = 20;   // Tốc độ xoá từng chữ
+  const deleteSpeed = 50;   // Tốc độ xoá từng chữ
   const delayBetweenLoops = 1000; // Dừng trước khi lặp lại
 
   useEffect(() => {

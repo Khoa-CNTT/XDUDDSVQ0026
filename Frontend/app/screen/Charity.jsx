@@ -182,7 +182,7 @@ export default function Charity() {
       <ScrollView className="flex-1">
         <View>
           <Text className="text-center font-extrabold text-4xl mt-5">
-            Donate Books
+            Quyên Góp Sách
           </Text>
           <Text className="text-center text-gray-600 mt-2">
             Đã có {donationsCount} cuốn sách được quyên góp
@@ -228,7 +228,7 @@ export default function Charity() {
             disabled={loading}
           >
             <Text className="text-white text-xl font-bold text-center">
-              Select Book File
+              Chọn Tệp Sách
             </Text>
           </TouchableOpacity>
         </View>
@@ -251,7 +251,7 @@ export default function Charity() {
               disabled={!selectedFile || !name || !email || !title || loading}
             >
               <Text className="text-white text-xl font-bold text-center">
-                Donate
+                Quyên Góp
               </Text>
             </TouchableOpacity>
           )}

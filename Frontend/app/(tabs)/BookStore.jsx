@@ -506,9 +506,9 @@ export default function BookStore() {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
       {/* Header */}
-      <View className="flex-row justify-between items-center px-4 py-4">
+      <View className="pt-2 pb-4 px-4">
         <View>
-          <Text className="text-2xl font-bold text-gray-800">Thư viện sách</Text>
+          <Text className="text-4xl font-bold ">Cửa Hàng</Text>
           <Text className="text-sm text-gray-500 mt-1">Khám phá hàng nghìn cuốn sách hay</Text>
         </View>
       </View>
