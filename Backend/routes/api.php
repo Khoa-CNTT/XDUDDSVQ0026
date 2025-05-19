@@ -30,6 +30,7 @@ Route::post('/quen-mat-khau', [UsersController::class, 'quenMatKhau']);
 
 // Public route with token parameter for iframe PDF viewing
 Route::get('/pdfs/{pdf}/download-with-token', [PDFController::class, 'downloadWithToken']);
+Route::get('/pdfs/{pdf}/download-translated-with-token', [PDFController::class, 'downloadTranslatedWithToken']);
 
 // Public Book routes
 Route::get('/books', [BookController::class, 'danhSach']);
@@ -85,13 +86,15 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // PDF routes
     Route::get('/pdfs', [PDFController::class, 'index']);
-    Route::post('/pdfs', [PDFController::class, 'store']);
+    // Route::post('/pdfs', [PDFController::class, 'store']);
     Route::post('/pdfs/upload', [PDFController::class, 'upload']);
     Route::get('/pdfs/{pdf}', [PDFController::class, 'show']);
     Route::put('/pdfs/{pdf}', [PDFController::class, 'update']);
     Route::delete('/pdfs/{pdf}', [PDFController::class, 'destroy']);
     Route::get('/pdfs/{pdf}/download', [PDFController::class, 'download']);
+    Route::get('/pdfs/{pdf}/download-translated', [PDFController::class, 'downloadTranslated']);
     Route::post('/docx/upload', [PDFController::class, 'uploadDocx']);
+    Route::post('/pdfs/translate', [PDFController::class, 'translate']);
 
     // User book preferences routes
     Route::post('/books/{id}/save', [UserBookPreferenceController::class, 'luuSach']);
@@ -106,3 +109,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/pdf-history', [PdfHistoryController::class, 'getUserHistory']);
     Route::post('/pdf-history', [PdfHistoryController::class, 'updateHistory']);
 });
+
+
+Route::post('/pdfs', [PDFController::class, 'store']);

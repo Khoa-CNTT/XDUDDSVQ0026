@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
-
+use OpenAI;
 use Illuminate\Http\Request;
 use App\Models\PDF;
 use Illuminate\Support\Facades\Storage;
@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Auth\Access\AuthorizationException;
 use App\Services\DocumentConversionService;
 use Illuminate\Support\Str;
+use Smalot\PdfParser\Parser;
+use Dompdf\Dompdf;
+use Dompdf\Options;
 
 class PDFController extends Controller
 {
@@ -100,73 +103,146 @@ class PDFController extends Controller
             ], 500);
         }
     }
+    
 
     public function store(Request $request)
     {
+        set_time_limit(0);
         try {
             DB::beginTransaction();
             
-            // Log input data
+            // 1. Validate input
             Log::info('PDF upload request data', [
-                'has_file' => $request->hasFile('file'),
-                'all_inputs' => $request->all()
+                'has_file'   => $request->hasFile('file'),
+                'inputs'     => $request->all()
             ]);
-            
             $request->validate([
-                'file' => 'required|file|mimes:pdf|max:40960', // Max 40MB (from 10MB)
-                'title' => 'nullable|string|max:255',
-                'description' => 'nullable|string'
+                'file'        => 'required|file|mimes:pdf|max:40960',
+                'title'       => 'nullable|string|max:255',
+                'description' => 'nullable|string',
             ]);
 
+            // 2. Lưu file gốc
             $file = $request->file('file');
-            
-            // Kiểm tra thư mục lưu trữ
-            $storagePath = storage_path('app/public/pdfs');
-            if (!file_exists($storagePath)) {
-                Log::warning('Storage directory does not exist, creating it', ['path' => $storagePath]);
-                mkdir($storagePath, 0755, true);
-            }
-            
-            // Log thông tin file
-            Log::info('PDF file info', [
-                'original_name' => $file->getClientOriginalName(),
-                'size' => $file->getSize(),
-                'mime' => $file->getMimeType()
-            ]);
-            
             $path = $file->store('pdfs', 'public');
             Log::info('File stored at path', ['path' => $path]);
 
+            // 3. Tạo record DB
             $pdf = PDF::create([
-                'user_id' => Auth::user()->user_id,
-                'title' => $request->title ?? $file->getClientOriginalName(),
+                // 'user_id'   => Auth::id(),
+                'user_id'   => "KEYex",
+                'title'     => $request->title ?? $file->getClientOriginalName(),
                 'description' => $request->description,
                 'file_path' => $path,
                 'file_size' => $file->getSize(),
-                'mime_type' => $file->getMimeType()
+                'mime_type' => $file->getMimeType(),
+            ]);
+            Log::info('PDF record created', ['pdf_id' => $pdf->id]);
+
+            // Kiểm tra kích thước file để quyết định có dịch hay không
+            $fileSizeInMB = $file->getSize() / (1024 * 1024); // Convert to MB
+            $sizeLimit = 0.20; // 0.20MB = 200KB
+            
+            $translateFile = $fileSizeInMB <= $sizeLimit;
+            
+            Log::info('File size check for translation', [
+                'size_bytes' => $file->getSize(),
+                'size_mb' => $fileSizeInMB,
+                'limit_mb' => $sizeLimit,
+                'will_translate' => $translateFile ? 'Yes' : 'No'
             ]);
             
-            Log::info('PDF record created', ['pdf_id' => $pdf->id]);
-            
+            if ($translateFile) {
+                // 4. Đọc text từ file gốc
+                $fullPath = storage_path('app/public/' . $path);
+                $parser   = new Parser();
+                $text     = trim($parser->parseFile($fullPath)->getText());
+    
+                // 5. Chia nhỏ thành các chunk ~2000 ký tự
+                $chunks = preg_split(
+                    '/(?<=\.)\s+/',
+                    wordwrap($text, 2000, "\n", true)
+                );
+    
+                // 6. Dịch mỗi chunk với OpenAI
+                $client     = OpenAI::client("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");
+                $translated = '';
+                foreach ($chunks as $chunk) {
+                    $resp = $client->chat()->create([
+                        'model'       => 'gpt-3.5-turbo',
+                      
+                        'messages' => [
+                [
+                    'role'    => 'system',
+                    'content' => 'Bạn là một chuyên gia dịch thuật. Nội dung đầu vào hoàn toàn bằng tiếng Việt, nhiệm vụ của bạn là dịch toàn bộ sang tiếng Anh và chỉ trả về văn bản tiếng Anh, không giữ lại bất kỳ đoạn tiếng Việt nào.'
+                ],
+                [
+                    'role'    => 'user',
+                    'content' => "Vui lòng dịch đoạn sau sang tiếng Anh:\n\n" . $chunk
+                ],
+            ],
+                        'temperature' => 0.0,
+                    ]);
+                    $translated .= trim($resp->choices[0]->message->content) . "\n\n";
+                }
+    
+                $options = new Options();
+                $options->set('defaultFont', 'DejaVuSans');        // name you gave in load_font.php
+                $options->set('isHtml5ParserEnabled', true);      // better UTF-8/CSS support
+    
+                $dompdf = new Dompdf();
+                $dompdf->loadHtml(
+                    '<div style="font-family: sans-serif; white-space: pre-wrap;">'
+                    . e($translated) .
+                    '</div>'
+                );
+                $dompdf->setPaper('A4');
+                $dompdf->render();
+                $output = $dompdf->output();
+    
+                // 8. Lưu file dịch và cập nhật DB
+                $outPath = 'pdfs/translates/'
+                         . now()->format('Ymd_His')
+                         . "_{$pdf->id}_"
+                         . uniqid()
+                         . '.pdf';
+                Storage::disk('public')->put($outPath, $output);
+                $pdf->file_path_translate = $outPath;
+                $pdf->save();
+                Log::info('Translated PDF stored & DB updated', ['outPath' => $outPath]);
+            } else {
+                Log::info('Translation skipped due to file size limit', [
+                    'pdf_id' => $pdf->id,
+                    'size_mb' => $fileSizeInMB,
+                    'limit_mb' => $sizeLimit
+                ]);
+            }
+
             DB::commit();
 
             return response()->json([
-                'success' => true,
-                'message' => 'PDF uploaded successfully',
-                'data' => $pdf
+                'success'    => true,
+                'message'    => $translateFile 
+                    ? 'Upload & translate PDF thành công' 
+                    : 'Upload PDF thành công (bỏ qua dịch do file quá lớn)',
+                'data'       => [
+                    'original_url'   => Storage::url($path),
+                    'translated_url' => $translateFile ? Storage::url($outPath) : null,
+                    'pdf_record'     => $pdf,
+                    'translated'     => $translateFile,
+                ],
             ], 201);
-        } catch (\Exception $e) {
+
+        } catch (\Throwable $e) {
             DB::rollBack();
-            Log::error('PDF upload failed', [
+            Log::error('PDF upload & translate failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to upload PDF: ' . $e->getMessage(),
-                'error' => $e->getMessage(),
-                'file_exists' => $request->hasFile('file')
+                'message' => 'Lỗi khi upload hoặc dịch PDF',
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
@@ -317,6 +393,78 @@ class PDFController extends Controller
     }
     
     /**
+     * Download the translated version of a PDF file
+     */
+    public function downloadTranslated(PDF $pdf)
+    {
+        try {
+            if (Auth::user()->user_id !== $pdf->user_id) {
+                throw new AuthorizationException('You are not authorized to download this PDF.');
+            }
+
+            // Kiểm tra xem PDF có bản dịch hay không
+            if (!$pdf->file_path_translate || !Storage::disk('public')->exists($pdf->file_path_translate)) {
+                // Log chi tiết để debug
+                Log::error('Translated PDF file not found', [
+                    'pdf_id' => $pdf->id,
+                    'file_path_translate' => $pdf->file_path_translate ?? 'NULL',
+                    'exists_in_storage' => $pdf->file_path_translate ? 
+                        Storage::disk('public')->exists($pdf->file_path_translate) : false,
+                    'absolute_path' => $pdf->file_path_translate ? 
+                        Storage::disk('public')->path($pdf->file_path_translate) : 'NULL',
+                    'all_fields' => $pdf->toArray()
+                ]);
+                
+                throw new \Exception('Translated file not found on server');
+            }
+
+            $file = Storage::disk('public')->path($pdf->file_path_translate);
+            
+            // Log the file access attempt
+            Log::info('Translated PDF download requested', [
+                'pdf_id' => $pdf->id,
+                'user_id' => Auth::user()->user_id,
+                'file_path_translate' => $pdf->file_path_translate,
+                'absolute_path' => $file,
+                'file_exists' => file_exists($file),
+                'storage_paths' => [
+                    'public_path' => public_path(),
+                    'storage_path' => storage_path(),
+                    'storage_public_path' => storage_path('app/public')
+                ]
+            ]);
+            
+            if (!file_exists($file)) {
+                Log::error('Translated PDF file exists in storage but not on filesystem', [
+                    'pdf_id' => $pdf->id,
+                    'file_path_translate' => $pdf->file_path_translate,
+                    'absolute_path' => $file,
+                    'storage_disk_files' => Storage::disk('public')->files('pdfs/translates')
+                ]);
+                throw new \Exception('Translated file exists in database but not on filesystem');
+            }
+            
+            // Direct file response
+            return response()->file($file, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $pdf->title . '_translated.pdf"'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Translated PDF download failed', [
+                'error' => $e->getMessage(),
+                'pdf_id' => $pdf->id ?? null,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to download translated PDF: ' . $e->getMessage(),
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Download a PDF file using token-based authentication
      * This is designed for iframe embedding where header-based authentication doesn't work well
      */
@@ -389,6 +537,93 @@ class PDFController extends Controller
         }
     }
     
+    /**
+     * Download a translated PDF file using token-based authentication
+     * This is designed for iframe embedding where header-based authentication doesn't work well
+     */
+    public function downloadTranslatedWithToken(Request $request, PDF $pdf)
+    {
+        try {
+            // Get token from request
+            $token = $request->query('token');
+            
+            if (empty($token)) {
+                throw new \Exception('No authentication token provided');
+            }
+            
+            // Validate token and get user
+            $user = $this->getUserFromToken($token);
+            
+            if (!$user) {
+                throw new AuthorizationException('Invalid authentication token');
+            }
+            
+            // Check if user owns this PDF
+            if ($user->user_id !== $pdf->user_id) {
+                throw new AuthorizationException('You are not authorized to download this PDF');
+            }
+            
+            // Check if translated file exists
+            if (!$pdf->file_path_translate || !Storage::disk('public')->exists($pdf->file_path_translate)) {
+                // Log chi tiết để debug
+                Log::error('Translated PDF file not found (token access)', [
+                    'pdf_id' => $pdf->id,
+                    'file_path_translate' => $pdf->file_path_translate ?? 'NULL',
+                    'exists_in_storage' => $pdf->file_path_translate ? 
+                        Storage::disk('public')->exists($pdf->file_path_translate) : false,
+                    'absolute_path' => $pdf->file_path_translate ? 
+                        Storage::disk('public')->path($pdf->file_path_translate) : 'NULL',
+                    'all_fields' => $pdf->toArray()
+                ]);
+                
+                throw new \Exception('Translated file not found on server');
+            }
+            
+            $file = Storage::disk('public')->path($pdf->file_path_translate);
+            
+            // Check if file exists on filesystem
+            if (!file_exists($file)) {
+                Log::error('Translated PDF file exists in storage but not on filesystem (token access)', [
+                    'pdf_id' => $pdf->id,
+                    'file_path_translate' => $pdf->file_path_translate,
+                    'absolute_path' => $file,
+                    'storage_disk_files' => Storage::disk('public')->files('pdfs/translates')
+                ]);
+                throw new \Exception('Translated file exists in database but not on filesystem');
+            }
+            
+            // Log successful access
+            Log::info('Translated PDF download with token', [
+                'pdf_id' => $pdf->id,
+                'user_id' => $user->user_id,
+                'file_path_translate' => $pdf->file_path_translate,
+                'file_size' => filesize($file),
+                'file_mime' => mime_content_type($file),
+                'storage_paths' => [
+                    'public_path' => public_path(),
+                    'storage_path' => storage_path(),
+                    'storage_public_path' => storage_path('app/public')
+                ]
+            ]);
+            
+            // Serve the file
+            return response()->file($file, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $pdf->title . '_translated.pdf"'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Translated PDF download with token failed', [
+                'error' => $e->getMessage(),
+                'pdf_id' => $pdf->id ?? null,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Return a plain text error for iframe compatibility
+            return response($e->getMessage(), 403)
+                ->header('Content-Type', 'text/plain');
+        }
+    }
+
     /**
      * Get user from personal access token
      */

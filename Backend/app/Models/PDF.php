@@ -21,7 +21,8 @@ class PDF extends Model
         'original_path',
         'original_size',
         'mime_type',
-        'file_type'
+        'file_type',
+        'file_path_translate'
     ];
 
     protected $casts = [
