@@ -7,6 +7,7 @@ use App\Http\Controllers\API\CategoryController;
 use App\Http\Controllers\API\AuthorController;
 use App\Http\Controllers\API\DashboardController;
 use App\Http\Controllers\API\UserController;
+use App\Http\Controllers\DonateBookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -58,6 +59,11 @@ Route::post('/debug/book-validation', function(\Illuminate\Http\Request $request
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
+
+// Donate books routes
+Route::get('/user-donations-count', [DonateBookController::class, 'getUserDonationsCount']);
+Route::get('/donated-books', [DonateBookController::class, 'getAllDonatedBooks']);
+Route::get('/donated-books/{id}', [DonateBookController::class, 'getDonationById']);
 
 // Temporarily adding these routes without auth for testing
 Route::get('/dashboard', [DashboardController::class, 'index']);
