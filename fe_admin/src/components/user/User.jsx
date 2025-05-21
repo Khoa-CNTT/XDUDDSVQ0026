@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { userAPI } from '../../services/api';
 import UserTable from './UserTable';
 import UserModal from './UserModal';
+import axios from 'axios';
 
 export default function User() {
     const [users, setUsers] = useState([]);
@@ -10,10 +11,21 @@ export default function User() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState('view'); // 'view', 'edit' - removed 'create'
+    const [donationCounts, setDonationCounts] = useState({});
 
     useEffect(() => {
         fetchUsers();
     }, []);
+
+    const fetchDonationCount = async (email) => {
+        try {
+            const response = await axios.get(`http://localhost:8000/api/user-donations-count?email=${email}`);
+            return response.data.count || 0;
+        } catch (err) {
+            console.error(`Failed to fetch donation count for ${email}:`, err);
+            return 0;
+        }
+    };
 
     const fetchUsers = async () => {
         try {
@@ -29,6 +41,16 @@ export default function User() {
             })) : [];
             
             setUsers(processedUsers);
+            
+            // Fetch donation counts for each user
+            const counts = {};
+            for (const user of processedUsers) {
+                if (user.email) {
+                    counts[user.email] = await fetchDonationCount(user.email);
+                }
+            }
+            setDonationCounts(counts);
+            
             setError(null);
         } catch (err) {
             console.error('Failed to fetch users:', err);
@@ -146,6 +168,7 @@ export default function User() {
             ) : (
                 <UserTable 
                     users={users} 
+                    donationCounts={donationCounts}
                     onEdit={handleEdit} 
                     onDelete={handleDelete} 
                     onView={handleView}

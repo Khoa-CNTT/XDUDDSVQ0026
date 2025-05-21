@@ -71,6 +71,14 @@ export default function Category() {
   };
 
   const handleDelete = async (categoryId) => {
+    // Kiểm tra xem danh mục có sách hay không
+    const bookCount = getBookCountByCategory(categoryId);
+    
+    if (bookCount > 0) {
+      alert(`Không thể xóa danh mục này vì có ${bookCount} sách thuộc danh mục này.`);
+      return;
+    }
+    
     if (window.confirm("Bạn có chắc chắn muốn xóa danh mục này?")) {
       try {
         await categoryAPI.deleteCategory(categoryId);

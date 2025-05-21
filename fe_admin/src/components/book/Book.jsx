@@ -12,6 +12,8 @@ export default function Book() {
   const [selectedBook, setSelectedBook] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("view"); // 'view', 'edit', 'create'
+  const [currentPage, setCurrentPage] = useState(1);
+  const [booksPerPage] = useState(10);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -84,6 +86,24 @@ export default function Book() {
 
     fetchData();
   }, []);
+
+  // Pagination logic
+  const indexOfLastBook = currentPage * booksPerPage;
+  const indexOfFirstBook = indexOfLastBook - booksPerPage;
+  const currentBooks = books.slice(indexOfFirstBook, indexOfLastBook);
+  const totalPages = Math.ceil(books.length / booksPerPage);
+
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
 
   const handleEdit = (book) => {
     setSelectedBook(book);
@@ -241,14 +261,48 @@ export default function Book() {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
         </div>
       ) : (
-        <BookTable
-          books={books}
-          categories={categories}
-          authors={authors}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onView={handleView}
-        />
+        <>
+          <BookTable
+            books={currentBooks}
+            categories={categories}
+            authors={authors}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onView={handleView}
+          />
+          <div className="mt-4 flex justify-between items-center">
+            <div className="text-sm text-gray-600">
+              Hiển thị {currentBooks.length} trên tổng số {books.length} sách
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={prevPage}
+                disabled={currentPage === 1}
+                className={`px-4 py-2 rounded-md ${
+                  currentPage === 1
+                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
+              >
+                Trước
+              </button>
+              <span className="flex items-center px-4">
+                Trang {currentPage}/{totalPages}
+              </span>
+              <button
+                onClick={nextPage}
+                disabled={currentPage === totalPages}
+                className={`px-4 py-2 rounded-md ${
+                  currentPage === totalPages
+                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
+              >
+                Tiếp
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
       {modalOpen && (

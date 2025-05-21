@@ -227,9 +227,9 @@ export default function Dashboard() {
 
           <div className="mb-8">
             <RecentItemsTable
-              title="Sách Mới Nhất"
+              title="Sách"
               items={recentBooks}
-              headers={["ID", "Tên Sách", "Giá", "Trạng Thái", "Ngày Tạo"]}
+              headers={["ID", "Tên Sách", "Trạng Thái", "Ngày Tạo"]}
               renderRow={(book, index) => (
                 <tr
                   key={book.book_id}
@@ -241,14 +241,7 @@ export default function Dashboard() {
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                     {book.name_book}
                   </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {book.price
-                      ? new Intl.NumberFormat("vi-VN", {
-                          style: "currency",
-                          currency: "VND",
-                        }).format(book.price)
-                      : "Miễn phí"}
-                  </td>
+                  
                   <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                     {book.is_free ? (
                       <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">

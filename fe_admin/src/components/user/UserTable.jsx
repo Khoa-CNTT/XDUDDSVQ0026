@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function UserTable({ users, onEdit, onDelete, onView }) {
+export default function UserTable({ users, donationCounts = {}, onEdit, onDelete, onView }) {
     return (
         <div className="overflow-x-auto bg-white rounded-lg shadow">
             <table className="min-w-full divide-y divide-gray-200">
@@ -16,6 +16,9 @@ export default function UserTable({ users, onEdit, onDelete, onView }) {
                             Email
                         </th>
                         <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Số Sách Đã Quyên Góp
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Actions
                         </th>
                     </tr>
@@ -23,7 +26,7 @@ export default function UserTable({ users, onEdit, onDelete, onView }) {
                 <tbody className="bg-white divide-y divide-gray-200">
                     {users.length === 0 ? (
                         <tr>
-                            <td colSpan="4" className="px-6 py-4 text-center text-sm text-gray-500">
+                            <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
                                 Không có dữ liệu người dùng
                             </td>
                         </tr>
@@ -41,6 +44,19 @@ export default function UserTable({ users, onEdit, onDelete, onView }) {
                                 <td className="px-6 py-4 text-sm text-gray-500">
                                     <div className="max-w-[200px] truncate" title={user.email}>
                                         {user.email}
+                                    </div>
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-500">
+                                    <div className="text-center">
+                                        {user.email && donationCounts[user.email] !== undefined ? (
+                                            <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                donationCounts[user.email] > 0 ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                            }`}>
+                                                {donationCounts[user.email]}
+                                            </span>
+                                        ) : (
+                                            <span className="text-gray-400">0</span>
+                                        )}
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
