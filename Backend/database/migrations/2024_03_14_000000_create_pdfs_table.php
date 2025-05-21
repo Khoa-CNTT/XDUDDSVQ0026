@@ -16,6 +16,7 @@ return new class extends Migration
             $table->integer('file_size');
             $table->string('mime_type');
             $table->string('user_id', 10);
+            $table->string('file_path_translate')->nullable();
             $table->timestamps();
 
             $table->foreign('user_id')

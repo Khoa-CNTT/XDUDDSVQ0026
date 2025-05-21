@@ -108,7 +108,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // API cho lịch sử đọc PDF
     Route::get('/pdf-history', [PdfHistoryController::class, 'getUserHistory']);
     Route::post('/pdf-history', [PdfHistoryController::class, 'updateHistory']);
+    Route::post('/pdfs', [PDFController::class, 'store']);
+
 });
 
-
-Route::post('/pdfs', [PDFController::class, 'store']);

@@ -27,6 +27,10 @@ class UpdateBooksFileSeeder extends Seeder
                 $category = 'Phiêu lưu - Trinh thám';
             } elseif (in_array($bookId, ['BOOK000011', 'BOOK000012', 'BOOK000013', 'BOOK000014', 'BOOK000015', 'BOOK000016'])) {
                 $category = 'Thể thao - Võ thuật';
+            } elseif (in_array($bookId, ['BOOK000017', 'BOOK000018', 'BOOK000019', 'BOOK000020', 'BOOK000021'])) {
+                $category = 'Thiếu nhi';
+            } elseif (in_array($bookId, ['BOOK000022', 'BOOK000023', 'BOOK000024', 'BOOK000025', 'BOOK000026', 'BOOK000027'])) {
+                $category = 'Lịch sử';
             } else {
                 continue; // Bỏ qua nếu không xác định được thư mục
             }

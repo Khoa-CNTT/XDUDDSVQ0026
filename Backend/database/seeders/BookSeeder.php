@@ -18,6 +18,8 @@ class BookSeeder extends Seeder
         'CAT000001' => 'Hài Hước',
         'CAT000002' => 'Phiêu lưu - Trinh thám',
         'CAT000003' => 'Thể Thao',
+        'CAT000004' => 'Thiếu Nhi',
+        'CAT000005' => 'Lịch Sử',
     ];
 
     /**
@@ -93,6 +95,20 @@ class BookSeeder extends Seeder
             'Đỗ Phú Phi',
             'Đinh Hiệp',
             'Luca Caioli',
+            'Vitaliy Melentyev',
+            'Nguyễn Đổng Chi',
+            'Nikolai Nosov',
+            'Jean De La Fontaine',
+            'Vương Hồng Sển',
+            'Dixee R. Bartholomew-Feis',
+            'Iuri Tomi',
+            'Vitaliy Melentyev',
+            'Georges Boudarel',
+            'Paul Johnson',
+            'Jonathan Schell',
+            'Bùi Minh Triết',
+            'Dixee R. Bartholomew-Feis',
+            'Vương Hồng Sển',
         ];
         
         foreach ($authors as $index => $name) {
@@ -250,6 +266,99 @@ class BookSeeder extends Seeder
                 'category' => 'Thể Thao',
                 'pages' => '813'
             ],
+            // Sách Thiếu Nhi
+            [
+                "name_book" => "Kho Tàng Truyện Cổ Tích Việt Nam",
+                "title"     => "'Kho Tàng Truyện Cổ Tích Việt Nam' của Nguyễn Đổng Chi là tập hợp các câu chuyện cổ tích truyền thống của Việt Nam, được sưu tầm và biên soạn công phu. Cuốn sách phản ánh nét văn hóa dân gian đặc sắc, với những câu chuyện vừa mang tính giáo dục, vừa thể hiện trí tưởng tượng phong phú của người Việt xưa. Đây là tài liệu quý giá giúp bảo tồn và truyền lại các giá trị văn hóa truyền thống cho các thế hệ sau.",
+                "image"     => "https://thuviensachpdf.com/uploads/book/image/81/kho-tang-truyen-co-tich-viet-nam.jpg",
+                "author"    => "Nguyễn Đổng Chi",
+                "category"  => "Thiếu Nhi",
+                "pages"     => "1551"
+            ],
+            [
+                "name_book" => "Vichia Maleev Ở Nhà Và Ở Trường",
+                "title"     => "'Vichia Maleev Ở Nhà Và Ở Trường' của Nikolai Nosov là một truyện thiếu nhi nổi tiếng trong văn học Nga, kể về cuộc sống và những kỷ niệm đáng nhớ của cậu bé Vichia Maleev trong gia đình và trường học....",
+                "image"     => "https://thuviensachpdf.com/uploads/book/image/97/vichia-maleev-o-nha-va-o-truong.jpg",
+                "author"    => "Nikolai Nosov",
+                "category"  => "Thiếu Nhi",
+                "pages"     => "212"
+                ],
+                [
+                "name_book" => "Truyện Ngụ Ngôn Của La Fontaine",
+                "title"     => "'Truyện Ngụ Ngôn của La Fontaine' của Jean de La Fontaine là tuyển tập các câu chuyện ngụ ngôn nổi tiếng được sáng tác vào thế kỷ 17, lấy cảm hứng từ các truyền thống ngụ ngôn cổ đại như Aesop....",
+                "image"     => "https://thuviensachpdf.com/uploads/book/image/33/truyen-ngu-ngon-cua-la-fontaine.jpg",
+                "author"    => "Jean De La Fontaine",
+                "category"  => "Thiếu Nhi",
+                "pages"     => "130"
+                ],
+                [
+                "name_book" => "Thầy Phù Thủy Đi Trong Thành Phố",
+                "title"     => "Cuốn 'Thầy Phù Thủy Đi Trong Thành Phố' của Iuri Tomi là một truyện ngắn hoặc truyện thiếu nhi mang màu sắc huyền bí, kể về một thầy phù thủy với những phép thuật và cuộc phiêu lưu kỳ thú diễn ra trong không gian thành phố hiện đại....",
+                "image"     => "https://thuviensachpdf.com/uploads/book/image/64/thay-phu-thuy-di-trong-thanh-pho.jpg",
+                "author"    => "Iuri Tomi",
+                "category"  => "Thiếu Nhi",
+                "pages"     => "238"
+                ],
+                [
+                "name_book" => "Người Xanh Của Trái Đất Hồng",
+                "title"     => "Câu chuyện xoay quanh nhân vật 'Người Xanh' – biểu tượng cho sự hòa hợp, thông minh và trí tuệ vượt trội – trên hành tinh Trái Đất Hồng, một thế giới khác biệt với Trái Đất chúng ta. Tác phẩm khám phá các chủ đề về sự sống, phát triển văn minh, xung đột và hợp tác giữa các nền văn hóa vũ trụ, đồng thời đặt ra những câu hỏi sâu sắc về tương lai của nhân loại và trách nhiệm của con người với môi trường....",
+                "image"     => "https://thuviensachpdf.com/uploads/book/image/55/nguoi-xanh-cua-trai-dat-hong.jpg",
+                "author"    => "Vitaliy Melentyev",
+                "category"  => "Thiếu Nhi",
+                "pages"     => "222"
+                ],
+                // Sách Lịch Sử
+                [
+                    "name_book" => "Võ Nguyên Giáp",
+                    "title"     => "Cuốn sách 'Võ Nguyên Giáp' của Georges Boudarel là một tác phẩm tiểu sử – chính luận được viết bởi một sử gia và nhà nghiên cứu người Pháp, người từng sống và làm việc lâu năm tại Việt Nam.....",
+                    "image"     => "https://thuviensachpdf.com/uploads/book/image/38/vo-nguyen-giap.jpg",
+                    "author"    => "Georges Boudarel",
+                    "category"  => "Lịch Sử",
+                    "pages"     => "207"
+                    ],
+                    [
+                    "name_book" => "Lịch Sử Do Thái",
+                    "title"     => "Cuốn 'Lịch Sử Do Thái' (A History of the Jews) của Paul Johnson là một trong những tác phẩm lịch sử nổi bật nhất viết về dân tộc Do Thái – một dân tộc nhỏ bé về số lượng nhưng có ảnh hưởng sâu rộng đến lịch sử nhân loại.....",
+                    "image"     => "https://thuviensachpdf.com/uploads/book/image/53/lich-su-do-thai.jpg",
+                    "author"    => "Paul Johnson",
+                    "category"  => "Lịch Sử",
+                    "pages"     => "860"
+                    ],
+                    [
+                    "name_book" => "Ký Ức Không Quên",
+                    "title"     => "Cuốn 'Ký Ức Không Quên' (The Real War) của Jonathan Schell là một tác phẩm nổi bật trong dòng văn học phản chiến, đặc biệt tập trung vào chiến tranh Việt Nam dưới góc nhìn của một nhà báo và nhà bình luận chính trị người Mỹ.....",
+                    "image"     => "https://thuviensachpdf.com/uploads/book/image/28/ky-uc-khong-quen.jpg",
+                    "author"    => "Jonathan Schell",
+                    "category"  => "Lịch Sử",
+                    "pages"     => "185"
+                    ],
+                    [
+                    "name_book" => "Chiến Tranh Biến Giới Việt-Trung 1979",
+                    "title"     => "Cuốn 'Chiến tranh biên giới Việt – Trung 1979' của Bùi Minh Triết là một công trình nghiên cứu lịch sử nghiêm túc, tập trung vào cuộc chiến ngắn nhưng đầy căng thẳng giữa Việt Nam và Trung Quốc diễn ra vào đầu năm 1979. Đây là một trong số ít các tác phẩm viết chuyên sâu và khách quan về cuộc chiến tranh biên giới phía Bắc – một chủ đề từng bị hạn chế công bố trong thời gian dài.....",
+                    "image"     => "https://thuviensachpdf.com/images/chien-tranh-bien-gioi-viet-trung-1979.png",
+                    "author"    => "Bùi Minh Triết",
+                    "category"  => "Lịch Sử",
+                    "pages"     => "252"
+                    ],
+                    [
+                    "name_book" => "Oss Và Hồ Chí Minh",
+                    "title"     => "Cuốn 'OSS và Hồ Chí Minh: Cuộc gặp gỡ ngắn ngủi dẫn đến một cuộc chiến dài'của Dixee R. Bartholomew-Feis là một tác phẩm nghiên cứu lịch sử công phu và độc đáo, làm sáng tỏ một giai đoạn ít được biết đến trong mối quan hệ giữa Hoa Kỳ và Việt Nam – đặc biệt là mối liên hệ giữa tổ chức tình báo Mỹ...",
+                    "image"     => "https://thuviensachpdf.com/uploads/book/image/22/oss-va-ho-chi-minh.jpg",
+                    "author"    => "Dixee R. Bartholomew-Feis",
+                    "category"  => "Lịch Sử",
+                    "pages"     => "541"
+                    ],
+                    [
+                    "name_book" => "Sài Gòn Năm Xưa",
+                    "title"     => "Cuốn sách là tập hợp những ký sự, hồi ức và nghiên cứu về cuộc sống, con người, kiến trúc, phong tục, tập quán, và các biến động xã hội của Sài Gòn trong giai đoạn từ cuối thế kỷ 19 đến giữa thế kỷ 20.Vương Hồng Sển, một trí thức lớn của Nam Bộ, đã ghi chép rất tỉ mỉ từng góc phố, từng cảnh vật, từng con người để tái hiện một Sài Gòn xưa với sự sống động và chân thực nhất....",
+                    "image"     => "https://thuviensachpdf.com/uploads/book/image/33/sai-gon-nam-xua.jpg",
+                    "author"    => "Vương Hồng Sển",
+                    "category"  => "Lịch Sử",
+                    "pages"     => "231"
+                    ]
+                    
+
+                
         ];
         
         $bookCount = 0;
@@ -259,6 +368,8 @@ class BookSeeder extends Seeder
                 'Hài Hước' => 'CAT000001',
                 'Phiêu lưu - Trinh thám' => 'CAT000002',
                 'Thể Thao' => 'CAT000003',
+                'Thiếu Nhi' => 'CAT000004',
+                'Lịch Sử' => 'CAT000005',
                 default => 'CAT000001'
             };
             

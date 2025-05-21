@@ -129,8 +129,7 @@ class PDFController extends Controller
 
             // 3. Tạo record DB
             $pdf = PDF::create([
-                // 'user_id'   => Auth::id(),
-                'user_id'   => "KEYex",
+                'user_id' => Auth::user()->user_id,
                 'title'     => $request->title ?? $file->getClientOriginalName(),
                 'description' => $request->description,
                 'file_path' => $path,
@@ -141,7 +140,7 @@ class PDFController extends Controller
 
             // Kiểm tra kích thước file để quyết định có dịch hay không
             $fileSizeInMB = $file->getSize() / (1024 * 1024); // Convert to MB
-            $sizeLimit = 0.20; // 0.20MB = 200KB
+            $sizeLimit = 0.50; // 0.50MB = 500KB
             
             $translateFile = $fileSizeInMB <= $sizeLimit;
             

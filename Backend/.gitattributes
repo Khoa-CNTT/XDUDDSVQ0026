@@ -9,3 +9,7 @@
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore
+
+# Ngăn chặn các file có chứa thông tin nhạy cảm
+.env filter=git-crypt diff=git-crypt
+.env.* filter=git-crypt diff=git-crypt
