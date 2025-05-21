@@ -50,7 +50,7 @@ export default function LogIn() {
         Alert.alert("Thành công", result.message, [
           {
             text: "OK",
-            onPress: () => router.push("/(tabs)/Home"),
+            onPress: () => router.push("/(tabs)/BookStore"),
           },
         ]);
       } else {
@@ -109,7 +109,7 @@ export default function LogIn() {
         } else {
           console.log("Đăng nhập tự động thành công!");
           // Chuyển hướng đến trang Home
-          router.push("/(tabs)/Home");
+          router.push("/(tabs)/BookStore");
         }
       } else {
         Alert.alert("Lỗi đăng nhập", "Không tìm thấy thông tin đăng nhập");
