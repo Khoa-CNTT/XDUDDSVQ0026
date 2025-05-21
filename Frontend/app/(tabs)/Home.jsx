@@ -762,7 +762,7 @@ export default function HomeScreen() {
           key: `book-${book.id || book._id || book.book_id || index}`,
         };
 
-        console.log(`📚 Processed book ${index}: Cover image = ${coverImage}`);
+        // console.log(`📚 Processed book ${index}: Cover image = ${coverImage}`);
         return normalizedBook;
       });
 

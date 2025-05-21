@@ -261,6 +261,74 @@ export const downloadPDF = async (pdfId, customFileName = null) => {
   }
 };
 
+// Thêm mới: Tải bản dịch PDF từ server
+export const downloadTranslatedPDF = async (pdfId, customFileName = null) => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+
+    if (!token) {
+      throw new Error("Unauthorized. Please login.");
+    }
+
+    // Lấy thông tin PDF trước khi tải
+    const pdfDetails = await getPDFDetails(pdfId);
+
+    if (!pdfDetails.success) {
+      throw new Error("Failed to get PDF details for download");
+    }
+
+    // Kiểm tra xem có bản dịch không
+    if (!pdfDetails.data.file_path_translate) {
+      throw new Error("No translated version available for this PDF");
+    }
+    
+    const fileName =
+      customFileName || `${pdfDetails.data.title}_translated` || `pdf_${pdfId}_translated.pdf`;
+    const fileLocation = `${FileSystem.documentDirectory}${fileName}.pdf`;
+
+    // Kiểm tra xem file đã tồn tại chưa
+    const fileInfo = await FileSystem.getInfoAsync(fileLocation);
+
+    if (fileInfo.exists) {
+      // Xóa file cũ để đảm bảo luôn tải bản mới nhất
+      await FileSystem.deleteAsync(fileLocation, { idempotent: true });
+      console.log("Deleted existing translated file to ensure fresh download");
+    }
+
+    console.log(`Downloading translated PDF to: ${fileLocation}`);
+
+    // Bắt đầu tải file
+    const downloadResumable = FileSystem.createDownloadResumable(
+      `${API_URL}/pdfs/${pdfId}/download-translated`,
+      fileLocation,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+      (downloadProgress) => {
+        const progress =
+          downloadProgress.totalBytesWritten /
+          downloadProgress.totalBytesExpectedToWrite;
+        console.log(`Translated PDF download progress: ${progress * 100}%`);
+      }
+    );
+
+    const { uri } = await downloadResumable.downloadAsync();
+
+    console.log("Translated PDF downloaded successfully:", uri);
+    return { 
+      success: true, 
+      uri, 
+      message: "Translated PDF downloaded successfully",
+      isTranslated: true
+    };
+  } catch (error) {
+    console.error("Download translated PDF error:", error);
+    return { success: false, message: error.message };
+  }
+};
+
 // Lưu tiến độ đọc PDF lên server
 export const savePdfReadingProgress = async (
   pdfId,
@@ -428,6 +496,7 @@ const pdfService = {
   updatePDF,
   deletePDF,
   downloadPDF,
+  downloadTranslatedPDF,
   savePdfReadingProgress,
   getRecentlyViewedPdfs,
 };

@@ -223,16 +223,20 @@ export default function UploadPdfScreen() {
                 fileName.toLowerCase().endsWith('.doc') ||
                 mimeType.includes('openxmlformats') ||
                 mimeType.includes('msword');
+    
+    const fileSize = selectedFile.size || 0;
+    const exceedsTranslationLimit = fileSize > 500 * 1024; // 500KB thay vì 200KB
 
     setPdfFile({
       name: selectedFile.name || `file_${new Date().getTime()}.${isDocx ? 'docx' : 'pdf'}`,
-      size: selectedFile.size || 0,
+      size: fileSize,
       uri: selectedFile.uri,
       type: isDocx ? 
             (fileName.toLowerCase().endsWith('.doc') ? "application/msword" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document") :
             "application/pdf",
       isDocx: isDocx, // Flag để theo dõi nếu đây là file DOCX
-      exceedsLimit: selectedFile.size > MAX_FILE_SIZE
+      exceedsLimit: fileSize > MAX_FILE_SIZE,
+      exceedsTranslationLimit: exceedsTranslationLimit
     });
   };
 
@@ -375,6 +379,14 @@ export default function UploadPdfScreen() {
         </Text>
       </TouchableOpacity>
 
+      <View className="bg-blue-50 p-4 rounded-lg mb-4 border border-blue-100">
+        <Text className="text-sm text-blue-800">
+          <Text className="font-bold">Lưu ý về tính năng dịch tự động: </Text>
+          Chỉ những file PDF có kích thước nhỏ hơn 500KB mới được dịch tự động sang tiếng Anh.
+          File lớn hơn vẫn được tải lên nhưng không có bản dịch.
+        </Text>
+      </View>
+
       {pdfFile && (
         <View className="bg-gray-50 p-4 rounded-lg mb-5 border border-gray-100">
           <Text className="text-base font-bold mb-2">{pdfFile.name}</Text>
@@ -384,6 +396,11 @@ export default function UploadPdfScreen() {
           {pdfFile.exceedsLimit && (
             <Text className="text-xs text-red-500 font-bold">
               Cảnh báo: File vượt quá giới hạn 40MB! Upload có thể thất bại.
+            </Text>
+          )}
+          {pdfFile.exceedsTranslationLimit && (
+            <Text className="text-xs text-amber-500 font-bold">
+              Lưu ý: File vượt quá 500KB nên sẽ không được dịch tự động sang tiếng Anh.
             </Text>
           )}
           {pdfFile.isDocx && (

@@ -44,6 +44,8 @@ export default function PdfViewer() {
   const [showMenu, setShowMenu] = useState(false);
   const [chapters, setChapters] = useState([]);
   const [activeTab, setActiveTab] = useState("chapters");
+  const [isTranslated, setIsTranslated] = useState(false); // Added state for tracking translated version
+  const [hasTranslation, setHasTranslation] = useState(false); // Added state to check if translation exists
 
   // Get screen dimensions for better PDF scaling
   const screenWidth = Dimensions.get("window").width;
@@ -58,15 +60,64 @@ export default function PdfViewer() {
     console.log(
       `PdfViewer initialized with pdfId: ${pdfId}, initialPage: ${
         initialPage || 1
-      }`
+      }, isTranslated: ${isTranslated}`
     );
     const loadPdf = async () => {
       try {
         setLoading(true);
         setError(null);
+        
+        // Reset all file states on translation toggle
+        if (isTranslated !== undefined) {
+          // Reset WebView và các trạng thái file để buộc tải lại
+          setFileUri(null);
+          setHtmlContent(null);
+          if (webViewRef.current) {
+            webViewRef.current.reload();
+          }
+        }
 
         if (localPath) {
-          await handleLocalFile(decodeURIComponent(localPath));
+          console.log("Original localPath:", localPath);
+          
+          // Normalize the path and check if it starts with 'file://'
+          let normalizedPath = decodeURIComponent(localPath);
+          
+          // For Android: ensure file:// prefix is present if needed
+          if (Platform.OS === 'android' && !normalizedPath.startsWith('file://')) {
+            // Add file:// prefix if this is an absolute path without the prefix
+            if (normalizedPath.startsWith('/')) {
+              normalizedPath = `file://${normalizedPath}`;
+            }
+          }
+          
+          console.log("Normalized path:", normalizedPath);
+          
+          try {
+            await handleLocalFile(normalizedPath);
+          } catch (localFileError) {
+            // console.error("Error handling local file:", localFileError);
+            
+            // If file not found and we have pdfId, try to download it from server instead
+            if (pdfId && localFileError.message.includes("file not found")) {
+              console.log("Local file not found, trying to download from server instead...");
+              // Set initialPage for when we download
+              if (initialPage) {
+                setCurrentPage(parseInt(initialPage, 10));
+              }
+              await loadReadingProgress();
+              await downloadPdf();
+              return;
+            }
+            
+            // If failed with normalized path, try falling back to the original
+            if (normalizedPath !== localPath) {
+              console.log("Trying with original path as fallback");
+              await handleLocalFile(localPath);
+            } else {
+              throw localFileError;
+            }
+          }
         } else if (pdfId) {
           // If initial page was provided, set it before loading progress
           if (initialPage) {
@@ -85,7 +136,7 @@ export default function PdfViewer() {
     };
 
     loadPdf();
-  }, [pdfId, localPath, viewMethod, initialPage]);
+  }, [pdfId, localPath, viewMethod, initialPage, isTranslated]); // Added isTranslated dependency
 
   // Save reading progress whenever current page changes
   useEffect(() => {
@@ -265,10 +316,62 @@ export default function PdfViewer() {
 
   const handleLocalFile = async (filePath) => {
     console.log("Loading local PDF file:", filePath);
+    console.log("File path type:", typeof filePath);
+    
+    // Log the decoded path for debugging
+    if (typeof filePath === 'string') {
+      console.log("Decoded path:", decodeURIComponent(filePath));
+    }
 
     // Check if file exists
     const fileInfo = await FileSystem.getInfoAsync(filePath);
+    console.log("FileSystem.getInfoAsync result:", fileInfo);
+    
     if (!fileInfo.exists) {
+      // Kiểm tra xem có phải đường dẫn Expo không
+      if (filePath.includes("FileSystem.documentDirectory")) {
+        const resolvedPath = filePath.replace("FileSystem.documentDirectory", FileSystem.documentDirectory);
+        console.log("Trying resolved Expo path:", resolvedPath);
+        
+        const resolvedFileInfo = await FileSystem.getInfoAsync(resolvedPath);
+        if (resolvedFileInfo.exists && resolvedFileInfo.size > 0) {
+          console.log("File found with resolved path:", resolvedFileInfo);
+          setFileUri(resolvedPath);
+          
+          if (viewMethod === "direct") {
+            createDirectWebViewHTML(resolvedPath);
+          } else if (viewMethod === "base64") {
+            await createBase64HTML(resolvedPath);
+          } else if (viewMethod === "pdfjs") {
+            createPdfJsHTML(resolvedPath);
+          }
+          
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Kiểm tra nếu đây là đường dẫn tương đối
+      const alternativePath = `${FileSystem.documentDirectory}${filePath.split('/').pop()}`;
+      console.log("Checking alternative path:", alternativePath);
+      
+      const altFileInfo = await FileSystem.getInfoAsync(alternativePath);
+      if (altFileInfo.exists && altFileInfo.size > 0) {
+        console.log("File found at alternative path:", altFileInfo);
+        setFileUri(alternativePath);
+        
+        if (viewMethod === "direct") {
+          createDirectWebViewHTML(alternativePath);
+        } else if (viewMethod === "base64") {
+          await createBase64HTML(alternativePath);
+        } else if (viewMethod === "pdfjs") {
+          createPdfJsHTML(alternativePath);
+        }
+        
+        setLoading(false);
+        return;
+      }
+      
       throw new Error("Local PDF file not found");
     }
 
@@ -1092,6 +1195,12 @@ export default function PdfViewer() {
       const data = await response.json();
       if (data.success) {
         setPdfInfo(data.data);
+        // Check if this PDF has a translated version
+        const hasTranslatedVersion = data.data.file_path_translate && 
+          data.data.file_path_translate.trim() !== '';
+        console.log("Translation status:", hasTranslatedVersion ? "Available" : "Not available", 
+          data.data.file_path_translate);
+        setHasTranslation(hasTranslatedVersion);
       }
     } catch (error) {
       console.error("Error fetching PDF info:", error);
@@ -1109,38 +1218,69 @@ export default function PdfViewer() {
       // First get PDF info
       await fetchPdfInfo();
 
+      // Tạo tên file và đường dẫn URL
+      const isDictTranslated = isTranslated;
+      console.log(`Đang tải phiên bản ${isDictTranslated ? "đã dịch" : "gốc"} của PDF ${pdfId}`);
+
       // Create direct API URL for the PDF
-      const directUrl = `${API_URL}/pdfs/${pdfId}/download`;
+      const directUrl = isDictTranslated 
+        ? `${API_URL}/pdfs/${pdfId}/download-translated`
+        : `${API_URL}/pdfs/${pdfId}/download`;
 
       // Check for local PDF file in document directory
-      const fileName = `pdf_${pdfId}.pdf`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+      const fileName = `pdf_${pdfId}${isDictTranslated ? '_translated' : ''}`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}.pdf`;
+      
+      console.log(`Đường dẫn file PDF đích: ${fileUri}`);
+      console.log(`URL API: ${directUrl}`);
 
       setFileUri(fileUri);
 
       // For all view methods, download the file first for consistency
-      console.log("Downloading PDF to local storage...");
+      console.log(`Đang tải ${isDictTranslated ? 'bản dịch' : 'bản gốc'} PDF về máy...`);
 
-      // Check if file already exists
+      // Check if file already exists - LUÔN XÓA NẾU ĐANG CHUYỂN ĐỔI
       const fileInfo = await FileSystem.getInfoAsync(fileUri);
-
-      if (fileInfo.exists && fileInfo.size > 0) {
-        console.log("Using existing downloaded file:", fileUri);
-
-        if (viewMethod === "direct") {
-          createDirectWebViewHTML(fileUri);
-        } else if (viewMethod === "base64") {
-          await createBase64HTML(fileUri);
-        } else if (viewMethod === "pdfjs") {
-          createPdfJsHTML(fileUri);
-        }
-
-        setLoading(false);
-      } else {
-        // Download the file
-        console.log("Downloading file to:", fileUri);
-
+      console.log("Kết quả kiểm tra file:", fileInfo);
+      
+      // Xóa file cũ nếu tồn tại để đảm bảo lấy nội dung mới nhất từ server
+      if (fileInfo.exists) {
         try {
+          await FileSystem.deleteAsync(fileUri, { idempotent: true });
+          console.log(`Đã xóa file cũ: ${fileUri}`);
+        } catch (deleteError) {
+          console.warn("Không thể xóa file cũ:", deleteError);
+        }
+      }
+      
+      // Luôn tải file mới từ server khi chuyển đổi
+      console.log(`Tải mới từ: ${directUrl}`);
+      console.log(`Lưu vào: ${fileUri}`);
+
+      // First ensure the directory exists (for Android)
+      if (Platform.OS === 'android') {
+        const dirPath = FileSystem.documentDirectory;
+        console.log("Kiểm tra thư mục:", dirPath);
+        
+        // Check if directory exists
+        const dirInfo = await FileSystem.getInfoAsync(dirPath);
+        if (!dirInfo.exists) {
+          console.log("Thư mục không tồn tại, đang tạo mới");
+          try {
+            await FileSystem.makeDirectoryAsync(dirPath, { intermediates: true });
+          } catch (dirError) {
+            console.error("Lỗi khi tạo thư mục:", dirError);
+          }
+        }
+      }
+
+      const maxAttempts = 2;
+      let lastError = null;
+      
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          console.log(`Lần tải thứ ${attempt}/${maxAttempts}`);
+          
           const downloadResumable = FileSystem.createDownloadResumable(
             directUrl,
             fileUri,
@@ -1153,14 +1293,40 @@ export default function PdfViewer() {
               const progress =
                 downloadProgress.totalBytesWritten /
                 downloadProgress.totalBytesExpectedToWrite;
-              console.log(`PDF download progress: ${progress * 100}%`);
+              console.log(`Tiến độ tải: ${progress * 100}%`);
             }
           );
 
           const downloadResult = await downloadResumable.downloadAsync();
 
           if (downloadResult && downloadResult.uri) {
-            console.log("Download successful:", downloadResult.uri);
+            console.log(`Tải thành công: ${downloadResult.uri}`);
+            
+            // Validate the downloaded file
+            const downloadedFileInfo = await FileSystem.getInfoAsync(downloadResult.uri);
+            console.log(`Thông tin file đã tải: ${JSON.stringify(downloadedFileInfo)}`);
+            
+            if (!downloadedFileInfo.exists || downloadedFileInfo.size <= 0) {
+              throw new Error("File đã tải về trống hoặc không thể truy cập");
+            }
+
+            // Kiểm tra xem file có phải là PDF hợp lệ không (bằng cách kiểm tra kích thước)
+            if (downloadedFileInfo.size < 100) {  // PDFs thường phải > 100 bytes
+              console.warn(`File đã tải có thể không phải PDF hợp lệ: ${downloadedFileInfo.size} bytes`);
+              
+              // Đọc và log nội dung để debug nếu file quá nhỏ
+              try {
+                const fileContent = await FileSystem.readAsStringAsync(downloadResult.uri, { encoding: 'utf8' });
+                console.log(`Nội dung file: ${fileContent.substring(0, 200)}...`);
+                
+                // Kiểm tra nếu là thông báo lỗi JSON từ server
+                if (fileContent.includes('"error"') || fileContent.includes('"message"')) {
+                  throw new Error(`Server trả về lỗi: ${fileContent}`);
+                }
+              } catch (readError) {
+                console.error("Không thể đọc nội dung file:", readError);
+              }
+            }
 
             // Get content URI for Android
             let contentUri = downloadResult.uri;
@@ -1169,10 +1335,10 @@ export default function PdfViewer() {
                 contentUri = await FileSystem.getContentUriAsync(
                   downloadResult.uri
                 );
-                console.log("Content URI for Android:", contentUri);
+                console.log("Content URI cho Android:", contentUri);
               } catch (err) {
                 console.warn(
-                  "Could not get content URI, using file path directly:",
+                  "Không thể lấy content URI, sử dụng đường dẫn file trực tiếp:",
                   err
                 );
               }
@@ -1187,19 +1353,96 @@ export default function PdfViewer() {
             }
 
             setLoading(false);
+            return; // Thoát vòng lặp nếu thành công
           } else {
-            throw new Error("Download completed but no file was returned");
+            throw new Error("Tải thành công nhưng không nhận được file");
           }
-        } catch (downloadError) {
-          console.error("Download error:", downloadError);
-          throw new Error("Failed to download PDF: " + downloadError.message);
+        } catch (retryError) {
+          console.error(`Lỗi lần tải ${attempt}:`, retryError);
+          lastError = retryError;
+          
+          if (attempt < maxAttempts) {
+            console.log(`Đợi trước khi thử lại lần ${attempt + 1}...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
         }
       }
+      
+      // Nếu tất cả các lần thử đều thất bại
+      if (isDictTranslated) {
+        console.log("Tải bản dịch thất bại sau nhiều lần thử, đang chuyển sang bản gốc");
+        setIsTranslated(false);
+        setError(null);
+        // We don't need to call downloadPdf again as the useEffect will handle it
+        return;
+      } else {
+        throw new Error(`Tải PDF thất bại sau ${maxAttempts} lần thử: ${lastError?.message || 'Lỗi không xác định'}`);
+      }
     } catch (error) {
-      console.error("Error in PDF handling:", error);
-      setError(`Failed to load PDF: ${error.message}`);
-      setLoading(false);
+      console.error("Lỗi xử lý PDF:", error);
+      
+      // If translated version fails, revert to original
+      if (isTranslated) {
+        console.log("Lỗi với bản dịch PDF, đang chuyển sang bản gốc");
+        setIsTranslated(false);
+        setLoading(true); // Keep loading state active
+        // Clear error since we're going to try again with original
+        setError(null);
+      } else {
+        setError(`Tải PDF thất bại: ${error.message}`);
+        setLoading(false);
+      }
     }
+  };
+
+  // Toggle between original and translated versions
+  const toggleTranslation = async () => {
+    if (!hasTranslation) {
+      Alert.alert(
+        "Không có bản dịch",
+        "Tài liệu PDF này chưa có bản dịch. Điều này có thể do kích thước tài liệu vượt quá giới hạn dịch tự động (500KB).",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+    
+    // Hiển thị thông báo chuyển đổi
+    // const message = !isTranslated ? 
+    //   "Đang chuyển sang bản dịch tiếng Anh..." : 
+    //   "Đang chuyển về bản gốc...";
+    
+    // Alert.alert(
+    //   "Đang chuyển đổi", 
+    //   message,
+    //   [{ text: "OK" }]
+    // );
+    
+    setLoading(true);
+    console.log(`Chuyển đổi sang bản ${!isTranslated ? "đã dịch" : "gốc"}`);
+    
+    // Xóa cache trước khi chuyển đổi - xóa CẢ HAI file để đảm bảo tải mới
+    try {
+      // Xóa file gốc
+      const originalFile = `${FileSystem.documentDirectory}pdf_${pdfId}.pdf`;
+      console.log(`Đang xóa file gốc: ${originalFile}`);
+      await FileSystem.deleteAsync(originalFile, { idempotent: true });
+      
+      // Xóa file đã dịch
+      const translatedFile = `${FileSystem.documentDirectory}pdf_${pdfId}_translated.pdf`;
+      console.log(`Đang xóa file đã dịch: ${translatedFile}`);
+      await FileSystem.deleteAsync(translatedFile, { idempotent: true });
+    } catch (error) {
+      console.warn("Lỗi khi xóa file cache:", error);
+    }
+    
+    // Đặt lại state khi chuyển đổi để tránh xung đột
+    setFileUri(null);
+    setHtmlContent(null);
+    
+    // Cập nhật trạng thái và tải lại
+    setIsTranslated(!isTranslated);
+    
+    // downloadPdf sẽ được gọi tự động bởi useEffect
   };
 
   const sharePdf = async () => {
@@ -1685,6 +1928,20 @@ export default function PdfViewer() {
           {pdfInfo?.title || "Trình xem PDF"}
         </Text>
 
+        {/* Translation toggle button */}
+        {hasTranslation && (
+          <TouchableOpacity 
+            style={styles.translateButton} 
+            onPress={toggleTranslation}
+          >
+            <Icon 
+              name={isTranslated ? "translate" : "language"} 
+              size={24} 
+              color="#fff" 
+            />
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={styles.debugButton} onPress={showDebugInfo}>
           <Icon name="info" size={20} color="#fff" />
         </TouchableOpacity>
@@ -1697,10 +1954,21 @@ export default function PdfViewer() {
         </TouchableOpacity>
       </View>
 
+      {/* Translation indicator */}
+      {isTranslated && (
+        <View style={styles.translationIndicator}>
+          <Text style={styles.translationText}>
+            Đang xem bản dịch tiếng Anh
+          </Text>
+        </View>
+      )}
+
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#0000ff" />
-          <Text style={styles.loadingText}>Đang tải PDF...</Text>
+          <Text style={styles.loadingText}>
+            Đang tải {isTranslated ? "bản dịch" : "tài liệu gốc"}...
+          </Text>
         </View>
       ) : error ? (
         <View style={styles.errorContainer}>
@@ -2250,5 +2518,29 @@ const styles = StyleSheet.create({
   currentPageButtonText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  translateButton: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  activeTranslateButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 16,
+  },
+  translationIndicator: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 4,
+    paddingHorizontal: 16,
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 88 : 56, 
+    left: 0,
+    right: 0,
+    zIndex: 9,
+    alignItems: 'center'
+  },
+  translationText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });
