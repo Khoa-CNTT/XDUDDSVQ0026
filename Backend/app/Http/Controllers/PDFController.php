@@ -164,7 +164,7 @@ class PDFController extends Controller
                 );
     
                 // 6. Dịch mỗi chunk với OpenAI
-                $client     = OpenAI::client("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");
+                $client     = OpenAI::client("");
                 $translated = '';
                 foreach ($chunks as $chunk) {
                     $resp = $client->chat()->create([
